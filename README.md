@@ -1,8 +1,16 @@
-# ROUT
+# ROUT — development
 
-A small tactical card game about committing blind.
+Ongoing work on ROUT, a small tactical card game about committing blind.
 
-**Play it in your browser — no install:** https://kahnjl-dev.github.io/rout/
+**Play the current build:** https://kahnjl-dev.github.io/rout-dev/
+
+> This is the living version — it changes. The version submitted with a job
+> application is frozen permanently in a separate repo and will never move:
+> [kahnjl-dev/rout](https://github.com/kahnjl-dev/rout) ·
+> [play it](https://kahnjl-dev.github.io/rout/)
+>
+> History before the `v1.0-submission` tag is shared with that repo. Nothing here
+> ever merges back into it.
 
 ---
 
@@ -55,22 +63,6 @@ out of simulating thousands of runs rather than out of anyone's taste.
 
 Earlier throwaway versions are kept in [`prototypes/`](prototypes/) because the dead ends
 are half the story.
-
-## Branches
-
-| Branch | What it is |
-|---|---|
-| `submission` | **What the public URL serves.** Frozen at the version sent with the job application. Also tagged `v1.0-submission`. |
-| `main` | Ongoing development. Pushing here does **not** change the live site. |
-
-To publish new work, merge it deliberately:
-
-```
-git checkout submission && git merge main && git push && git checkout main
-```
-
-Pages is deliberately pointed at `submission` rather than `main`, so the branch
-you work on by default can't disturb the link someone was given.
 
 ## Running it locally
 
