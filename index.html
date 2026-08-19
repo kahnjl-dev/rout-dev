@@ -22,6 +22,12 @@
 
   header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
   h1{font-size:12px;letter-spacing:.24em;color:var(--dim);font-weight:600}
+  /* so it is never ambiguous which build you are looking at */
+  .devtag{
+    font-size:9px;letter-spacing:.14em;color:var(--m);
+    border:1px solid rgba(255,196,74,.4);border-radius:3px;
+    padding:1px 4px;margin-left:5px;vertical-align:1px;
+  }
   .meta{font-size:11px;color:var(--faint)}
 
   /* leader morale bars */
@@ -342,7 +348,7 @@
 <div id="wrap">
 
   <header>
-    <h1>R O U T</h1>
+    <h1>R O U T <span class="devtag">DEV</span></h1>
     <span style="display:flex;align-items:center;gap:9px">
       <span class="meta" id="meta">rung 1/3 · wave 1/3</span>
       <button class="helpbtn" id="help" title="rules" aria-label="rules">?</button>
@@ -386,7 +392,8 @@
   <div class="pickbox">
     <div class="brand">
       <div class="btitle">ROUT</div>
-      <div class="bsub">A one-day game jam roguelike card game</div>
+      <div class="bsub">A one-day game jam roguelike card game
+        <span class="devtag" style="margin-left:6px">DEV BUILD</span></div>
       <button class="flink strong" id="pickLog">NOTES FROM THE DEVELOPER</button>
     </div>
     <h2>CHOOSE YOUR WARBAND</h2>
