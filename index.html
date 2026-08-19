@@ -72,6 +72,15 @@
   .c .st span{display:flex;align-items:center;gap:1px}
   .c .sv{color:var(--s)} .c .gv{color:var(--g)} .c .mv{color:var(--m)}
   .c .dug{color:var(--m);font-size:9px;vertical-align:1px;margin-left:1px}
+  .c .ty{
+    display:inline-block;font-size:7.5px;letter-spacing:.06em;padding:1px 3px;
+    border-radius:2px;margin-right:4px;vertical-align:1px;font-weight:700;
+  }
+  .t-inf{background:#2a3340;color:#9fb4cf}
+  .t-cav{background:#3a2d1e;color:#e0b070}
+  .t-arc{background:#1f3329;color:#82c79c}
+  /* a unit that is not in the front rank contributes no Strike — show it */
+  .c .sv.idle{color:#4d5560;text-decoration:line-through}
   .c.front{border-color:#3d4753;box-shadow:0 0 0 1px #1d232c inset}
   .c.them{border-left:2px solid var(--them)}
   .c.you{border-left:2px solid var(--you)}
@@ -114,10 +123,16 @@
 
   /* the lane currently being resolved */
   .lane.deployed{opacity:.72}
-  .lane.deployed::after{
-    content:'DEPLOYED';position:absolute;top:5px;left:0;right:0;text-align:center;
-    font-size:8px;letter-spacing:.14em;color:var(--faint);
+  .poschoice{
+    position:absolute;inset:0;z-index:5;background:rgba(10,13,17,.9);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+    border-radius:8px;
   }
+  .posbtn{
+    background:#12161c;border:1px solid var(--you);color:var(--you);border-radius:6px;
+    font-family:inherit;font-size:10px;letter-spacing:.12em;padding:9px 12px;cursor:pointer;width:78%;
+  }
+  .posbtn:active{transform:scale(.96)}
   .lane{position:relative}
   .lane.resolving{border-color:var(--m);background:#1b1a13}
   .lane.resolving .ltot{color:var(--m)}
@@ -524,32 +539,46 @@ const DEPLOY_N  = 3;      // opening line: exactly one card per lane
 // destruction happened in clash 1 and the reserve arrived too late to matter;
 // at +2 the split is ~60/40 and the reserve changes the result a third of the time.
 const DUG_IN    = 2;
+const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
 const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
 
 // Every faction is playable by either side. Base morale is the ONLY faction axis —
 // all decks total 30 card morale so the two never compound. See assertDecks().
 const FACTIONS = {
   HUMANS:{ name:'HUMANS', base:10, style:'mass', col:'#7f9fd0', tag:'H',
-    blurb:'Balanced. No weakness to exploit, no edge to lean on.', deck:[
-    {n:'LANCE',   s:8, g:3, m:2},{n:'SPEAR',   s:6, g:3, m:3},
-    {n:'BLADE',   s:7, g:4, m:2},{n:'SHIELD',  s:2, g:7, m:3},
-    {n:'WALL',    s:1, g:7, m:4},{n:'BULWARK', s:3, g:6, m:3},
-    {n:'BANNER',  s:2, g:4, m:7},{n:'STANDARD',s:3, g:5, m:6},
+    blurb:'Every arm, and an edge in none of them.', deck:[
+    {n:'KNIGHTS',   t:'cav', s:7, g:3, m:2},
+    {n:'SWORDSMEN', t:'inf', s:5, g:4, m:3},
+    {n:'LONGBOWS',  t:'arc', s:5, g:3, m:3},
+    {n:'CROSSBOWS', t:'arc', s:3, g:4, m:4},
+    {n:'SPEARMEN',  t:'inf', s:3, g:6, m:5},
+    {n:'THE BANNER',t:'inf', s:1, g:7, m:7},
   ]},
   GOBLINS:{ name:'GOBLINS', base:8, style:'hunt', col:'#8fc46a', tag:'G',
-    blurb:'Vicious and brittle. Kill fast, die faster, low morale to defend.', deck:[
-    {n:'CLAW', s:9, g:3, m:1},{n:'FANG', s:8, g:3, m:2},
-    {n:'RUSH', s:7, g:3, m:2},{n:'SWARM',s:6, g:4, m:3},
-    {n:'SPITE',s:5, g:3, m:4},{n:'HOWL', s:4, g:4, m:5},
-    {n:'TOTEM',s:2, g:5, m:6},{n:'IDOL', s:1, g:4, m:7},
+    blurb:'Half of them mounted. They live off the gaps in your line.', deck:[
+    {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:2},
+    {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:3},
+    {n:'LANCERS',      t:'cav', s:5, g:4, m:3},
+    {n:'SHORTBOWS',    t:'arc', s:4, g:3, m:4},
+    {n:'SPEAR MOB',    t:'inf', s:3, g:5, m:5},
+    {n:'THE IDOL',     t:'inf', s:1, g:5, m:7},
   ]},
   DWARVES:{ name:'DWARVES', base:12, style:'hold', col:'#d9a05b', tag:'D',
-    blurb:'Immovable. Hard to break, hard to break out of, high morale to beat.', deck:[
-    {n:'GATE',   s:1, g:7, m:2},{n:'ANVIL', s:2, g:7, m:2},
-    {n:'RAMPART',s:2, g:6, m:3},{n:'FORGE', s:3, g:6, m:3},
-    {n:'HAMMER', s:5, g:5, m:3},{n:'AXE',   s:4, g:5, m:4},
-    {n:'RUNE',   s:2, g:4, m:6},{n:'THRONE',s:1, g:4, m:7},
+    blurb:'No horse in the hold. They cannot chase you — only outlast you.', deck:[
+    {n:'HAMMERERS',   t:'inf', s:5, g:5, m:2},
+    {n:'CROSSBOWS',   t:'arc', s:5, g:4, m:4},
+    {n:'IRONBREAKERS',t:'inf', s:3, g:6, m:3},
+    {n:'THUNDERERS',  t:'arc', s:3, g:4, m:5},
+    {n:'SHIELD WALL', t:'inf', s:2, g:7, m:3},
+    {n:'THE ANVIL',   t:'inf', s:1, g:7, m:7},
   ]},
+};
+// each deck is two copies of every card
+const COPIES = 2;
+const TYPE = {
+  inf:{ label:'INF', glyph:'▮', name:'Infantry' },
+  cav:{ label:'CAV', glyph:'▰', name:'Cavalry'  },
+  arc:{ label:'ARC', glyph:'⌒', name:'Archers'  },
 };
 const FACTION_KEYS = Object.keys(FACTIONS);
 
@@ -560,9 +589,12 @@ function assertDecks(){
   for(const k of FACTION_KEYS){
     const f = FACTIONS[k];
     const total = f.deck.reduce((a,c)=>a+c.m,0);
-    if(total !== 30) bad.push(`${k} card morale ${total}, expected 30`);
-    if(f.deck.length !== 8) bad.push(`${k} has ${f.deck.length} cards, expected 8`);
-    for(const c of f.deck) if(c.g < 3 || c.g > 7) bad.push(`${k}/${c.n} guard ${c.g} outside 3-7`);
+    if(total !== 24) bad.push(`${k} card morale ${total}, expected 24`);
+    if(f.deck.length !== 6) bad.push(`${k} has ${f.deck.length} unique cards, expected 6`);
+    for(const c of f.deck){
+      if(c.g < 3 || c.g > 7) bad.push(`${k}/${c.n} guard ${c.g} outside 3-7`);
+      if(!TYPE[c.t])         bad.push(`${k}/${c.n} has no unit type`);
+    }
   }
   if(bad.length) console.warn('[ROUT] deck invariant broken:\n  ' + bad.join('\n  '));
   return bad;
@@ -677,7 +709,7 @@ let uid = 0;
 function mkSide(src){
   return {
     name: src.name, base: src.base, style: src.style || 'even',
-    deck: src.deck.map(c=>({...c, id:++uid})),
+    deck: Array.from({length:COPIES}, ()=>src.deck).flat().map(c=>({...c, id:++uid})),
     hand: [],
     lanes: [[],[],[]],   // index 0 === FRONT
     fallen: [],          // routed this fight
@@ -687,6 +719,7 @@ function mkSide(src){
 // ═══════════════════════════════════════════════ STATE
 let G, sel = null, busy = false, fightNo = 1;
 let resolvingLane = -1;      // lane currently being walked through, or -1
+let pendingLane   = -1;      // lane waiting on a front/behind answer, or -1
 
 let playerFaction = 'HUMANS';
 let run = null;
@@ -737,7 +770,8 @@ function beginFight(enc){
   // reveals WITHOUT fighting. The enemy's line is chosen now, before the player
   // places anything, so neither side is reacting to the other.
   G.phase = 'deploy';
-  G.deployLanes = [];
+  G.deployed = 0;
+  pendingLane = -1;
   const eP = POSTURE[G.them.style] || POSTURE.mass;
   G.enemyDeploy = pickDeployment(G.them, G.you, eP).map(c=>({card:c.card, L:c.L}));
 
@@ -751,7 +785,7 @@ function beginFight(enc){
 }
 
 // ═══════════════════════════════════════════════ RENDER
-function cardHTML(c, who, isFront){
+function cardHTML(c, who, isFront, isFighting){
   if(c.down){                                  // committed, not yet revealed
     return `<div class="c ${who} down" data-id="${c.id}"><div class="back">◆ ◆ ◆</div></div>`;
   }
@@ -760,9 +794,9 @@ function cardHTML(c, who, isFront){
   const cls = ['c', who, (isFront && !c.dead)?'front':'', c.tag?'newly':'', c.reveal?'revealing':'', dead].join(' ');
   const fate = c.dead ? `<span class="fate">${c.dead==='eliminated'?'ELIMINATED':'ROUTED'}</span>` : '';
   return `<div class="${cls}" data-id="${c.id}">
-    <div class="nm">${c.n}</div>
+    <div class="nm"><span class="ty t-${c.t}">${TYPE[c.t].label}</span>${c.n}</div>
     <div class="st">
-      <span class="sv">▲${c.s}</span><span class="gv">⬢${c.g}${c.dugIn?`<span class="dug">+${DUG_IN}</span>`:''}</span><span class="mv">✦${c.m}</span>
+      <span class="sv ${isFighting===false?'idle':''}">▲${c.s}</span><span class="gv">⬢${c.g}${c.dugIn?`<span class="dug">+${DUG_IN}</span>`:''}</span><span class="mv">✦${c.m}</span>
     </div>${fate}
   </div>`;
 }
@@ -770,9 +804,19 @@ function cardHTML(c, who, isFront){
 // Only living, revealed cards count for anything. Excluding face-down cards
 // matters: otherwise the lane totals leak a committed card's Strike before it flips.
 const living  = arr => arr.filter(c=>!c.dead && !c.down);
+// Occupancy is a different question from combat. A face-down card still holds a
+// slot — you know where your own line is even before it flips — so the lane cap
+// and the front/behind choice use this, never living().
+const present = arr => arr.filter(c=>!c.dead);
 const frontOf = (side,i) => living(side.lanes[i])[0] || null;
 function laneMorale(side, i){ return living(side.lanes[i]).reduce((t,c)=>t+c.m,0); }
-function laneStrike(side, i){ return living(side.lanes[i]).reduce((t,c)=>t+c.s,0); }
+// Only the front rank swings — except archers, who shoot from anywhere in the
+// lane. That is what makes a second unit DEPTH (a replacement) rather than
+// simply more damage, and what makes archers-behind-infantry the natural formation.
+const fights = (c, ix) => ix === 0 || c.t === 'arc';
+function laneStrike(side, i){
+  return living(side.lanes[i]).reduce((t,c,ix)=> t + (fights(c,ix) ? c.s : 0), 0);
+}
 
 function render(){
   const rungLabel = run && run.current
@@ -788,20 +832,28 @@ function render(){
 
   $('#board').innerHTML = LANE_BOUNTY.map((b,i)=>{
     const eFrontId = (frontOf(G.them,i)||{}).id, pFrontId = (frontOf(G.you,i)||{}).id;
+    // which units in this lane actually swing: the front rank, plus any archers
+    const swings = new Set();
+    for(const side of [G.you, G.them])
+      living(side.lanes[i]).forEach((c,ix)=>{ if(fights(c,ix)) swings.add(c.id); });
     // Index 0 is always the front of a stack. The enemy column sits above the
     // divider, so theirs renders reversed — the front card ends up nearest the
     // middle of the field, facing yours, the way both sides' fronts should.
-    const eStack = G.them.lanes[i].slice().reverse().map(c=>cardHTML(c,'them',c.id===eFrontId)).join('');
-    const pStack = G.you.lanes[i].map(c=>cardHTML(c,'you',c.id===pFrontId)).join('');
+    const eStack = G.them.lanes[i].slice().reverse().map(c=>cardHTML(c,'them',c.id===eFrontId,c.dead?undefined:swings.has(c.id))).join('');
+    const pStack = G.you.lanes[i].map(c=>cardHTML(c,'you',c.id===pFrontId,c.dead?undefined:swings.has(c.id))).join('');
     const pm = laneMorale(G.you,i), em = laneMorale(G.them,i);
     const held = pm>em ? '<span class="held" style="color:var(--you)">YOU HOLD</span>'
                : em>pm ? '<span class="held" style="color:var(--them)">THEY HOLD</span>'
                : '<span class="held">CONTESTED</span>';
     const ps = laneStrike(G.you,i), es = laneStrike(G.them,i);
     const eFront = frontOf(G.them,i), pFront = frontOf(G.you,i);
-    const deployed = G.phase==='deploy' && G.deployLanes.includes(i);
-    const canPick  = sel!==null && !busy && !G.over && !deployed;
-    return `<div class="lane ${canPick?'pick':''} ${deployed?'deployed':''} ${resolvingLane===i?'resolving':''}" data-lane="${i}">
+    const full    = present(G.you.lanes[i]).length >= LANE_CAP;
+    const canPick = sel!==null && !busy && !G.over && !full;
+    const choosing = pendingLane === i;
+    return `<div class="lane ${canPick?'pick':''} ${full?'deployed':''} ${resolvingLane===i?'resolving':''}" data-lane="${i}">
+      ${choosing ? `<div class="poschoice">
+        <button class="posbtn" data-pos="1">FRONT</button>
+        <button class="posbtn" data-pos="0">BEHIND</button></div>` : ''}
       <div class="ltot">${es?`▲${es} vs ⬢${pFront?effGuard(pFront):'—'}`:'&nbsp;'}</div>
       <div class="stack them">${eStack}</div>
       <div class="bounty">BOUNTY <b>${b}</b>${held}</div>
@@ -812,6 +864,9 @@ function render(){
 
   document.querySelectorAll('.lane').forEach(el=>{
     el.onclick = ()=>{ if(sel!==null && !busy && !G.over) place(+el.dataset.lane); };
+  });
+  document.querySelectorAll('.posbtn').forEach(b=>{
+    b.onclick = ev=>{ ev.stopPropagation(); placeAt(pendingLane, b.dataset.pos === '1'); };
   });
 
   $('#hand').innerHTML = G.you.hand.map((c,i)=>`
@@ -1022,6 +1077,7 @@ function pickMove(s, foe, P, mirrorLane){
   let best = null;
   s.hand.forEach((card, hi)=>{
     for(let L=0; L<3; L++){
+      if(living(s.lanes[L]).length >= LANE_CAP) continue;   // lane is full
       const v = scoreMove(s, foe, P, card, L, mirrorLane);
       if(!best || v > best.v) best = {v, hi, L, card};
     }
@@ -1038,11 +1094,11 @@ function pickDeployment(s, foe, P){
     for(let L=0; L<3; L++) cand.push({ hi, L, card, v: scoreMove(s, foe, P, card, L, null) });
   });
   cand.sort((a,b)=>b.v - a.v);
-  const out = [], usedCard = new Set(), usedLane = new Set();
+  const out = [], usedCard = new Set(), perLane = [0,0,0];
   for(const c of cand){
-    if(usedCard.has(c.hi) || usedLane.has(c.L)) continue;
-    out.push(c); usedCard.add(c.hi); usedLane.add(c.L);
-    if(out.length === 3) break;
+    if(usedCard.has(c.hi) || perLane[c.L] >= LANE_CAP) continue;
+    out.push(c); usedCard.add(c.hi); perLane[c.L]++;
+    if(out.length === DEPLOY_N) break;
   }
   return out;
 }
@@ -1069,18 +1125,17 @@ function computeDamage(stack, strike){
 }
 
 // ── deployment: three cards, one per lane, revealed without fighting ──
-async function deployCard(lane){
-  if(G.deployLanes.includes(lane)) return;      // one card per lane
+async function deployCard(lane, atFront){
   const card = G.you.hand.splice(sel,1)[0];
   sel = null;
   card.down = true;
   card.dugIn = true;                            // braced for the first clash
-  G.you.lanes[lane].unshift(card);
-  G.deployLanes.push(lane);
+  if(atFront) G.you.lanes[lane].unshift(card); else G.you.lanes[lane].push(card);
+  G.deployed++;
 
-  const left = DEPLOY_N - G.deployLanes.length;
+  const left = DEPLOY_N - G.deployed;
   if(left){
-    say(`Laying out your line — <b>${left}</b> more, one to each remaining lane.`);
+    say(`Laying out your line — <b>${left}</b> more. Up to two to a lane.`);
     render();
     return;
   }
@@ -1117,9 +1172,22 @@ async function revealDeployment(){
   tutStep(2);
 }
 
+// A lane holds at most two living units. With one already there the new unit can
+// go in front of it or behind it, which decides who swings and who waits.
 async function place(lane){
   if(busy || sel===null) return;
-  if(G.phase === 'deploy') return deployCard(lane);
+  const mine = present(G.you.lanes[lane]);
+  if(mine.length >= LANE_CAP) return;
+  if(mine.length === 0) return placeAt(lane, true);
+  pendingLane = lane; render();
+}
+
+function placeAt(lane, atFront){
+  pendingLane = -1;
+  return G.phase === 'deploy' ? deployCard(lane, atFront) : commitReserve(lane, atFront);
+}
+
+async function commitReserve(lane, atFront){
   busy = true;
   const myCard = G.you.hand.splice(sel,1)[0];
   sel = null;
@@ -1133,8 +1201,10 @@ async function place(lane){
 
   // ── 1. both commit, face down ──
   myCard.down = foeCard.down = true;
-  G.you.lanes[lane].unshift(myCard);           // FRONT
-  G.them.lanes[pick.L].unshift(foeCard);
+  if(atFront) G.you.lanes[lane].unshift(myCard); else G.you.lanes[lane].push(myCard);
+  // the AI shelters archers behind an existing unit; everything else leads
+  const foeBack = foeCard.t === 'arc' && living(G.them.lanes[pick.L]).length > 0;
+  if(foeBack) G.them.lanes[pick.L].push(foeCard); else G.them.lanes[pick.L].unshift(foeCard);
   lastPlayerLane = lane;      // set AFTER the AI chose — it never sees this wave
   say(`Wave ${G.wave} — both committed. Neither of you can see the other.`);
   render();
