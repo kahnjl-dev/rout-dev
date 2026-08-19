@@ -71,6 +71,7 @@
   .c .st{display:flex;justify-content:space-between;gap:2px;font-size:12.5px;font-variant-numeric:tabular-nums}
   .c .st span{display:flex;align-items:center;gap:1px}
   .c .sv{color:var(--s)} .c .gv{color:var(--g)} .c .mv{color:var(--m)}
+  .c .dug{color:var(--m);font-size:9px;vertical-align:1px;margin-left:1px}
   .c.front{border-color:#3d4753;box-shadow:0 0 0 1px #1d232c inset}
   .c.them{border-left:2px solid var(--them)}
   .c.you{border-left:2px solid var(--you)}
@@ -112,6 +113,12 @@
   }
 
   /* the lane currently being resolved */
+  .lane.deployed{opacity:.72}
+  .lane.deployed::after{
+    content:'DEPLOYED';position:absolute;top:5px;left:0;right:0;text-align:center;
+    font-size:8px;letter-spacing:.14em;color:var(--faint);
+  }
+  .lane{position:relative}
   .lane.resolving{border-color:var(--m);background:#1b1a13}
   .lane.resolving .ltot{color:var(--m)}
   .ltot.hot{color:var(--m);font-weight:700}
@@ -511,7 +518,13 @@ DWARVES   spread out and hold every lane</div>
 // ═══════════════════════════════════════════════ TUNING
 const LANE_BOUNTY = [2, 3, 2];
 const WAVES = 3;
-const HAND_SIZE = 5;
+const HAND_SIZE = 6;      // deploy 3 + two reserves, with a little choice left over
+const DEPLOY_N  = 3;      // opening line: exactly one card per lane
+// A prepared line is braced for the first clash. Without this, ~80% of all
+// destruction happened in clash 1 and the reserve arrived too late to matter;
+// at +2 the split is ~60/40 and the reserve changes the result a third of the time.
+const DUG_IN    = 2;
+const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
 
 // Every faction is playable by either side. Base morale is the ONLY faction axis —
 // all decks total 30 card morale so the two never compound. See assertDecks().
@@ -719,11 +732,20 @@ function beginFight(enc){
 
   G.wave = 1; G.over = false; sel = null; busy = false;
   lastPlayerLane = null;
+
+  // Wave 1 is deployment: both sides lay out a line, one card per lane, and it
+  // reveals WITHOUT fighting. The enemy's line is chosen now, before the player
+  // places anything, so neither side is reacting to the other.
+  G.phase = 'deploy';
+  G.deployLanes = [];
+  const eP = POSTURE[G.them.style] || POSTURE.mass;
+  G.enemyDeploy = pickDeployment(G.them, G.you, eP).map(c=>({card:c.card, L:c.L}));
+
   $('#endSlot').innerHTML = '';
   hideOverlays();
   say(enc.isBoss
-    ? `<b>${enc.title}</b> — the last fight. Three waves.`
-    : `<b>${enc.title}</b> — three waves. Pick a card, pick a lane.`);
+    ? `<b>${enc.title}</b> — the last fight. Lay out your line: one card to each lane.`
+    : `<b>${enc.title}</b> — lay out your line: one card to each lane.`);
   render();
   tutStep(0);                       // no-ops after the first fight
 }
@@ -740,7 +762,7 @@ function cardHTML(c, who, isFront){
   return `<div class="${cls}" data-id="${c.id}">
     <div class="nm">${c.n}</div>
     <div class="st">
-      <span class="sv">▲${c.s}</span><span class="gv">⬢${c.g}</span><span class="mv">✦${c.m}</span>
+      <span class="sv">▲${c.s}</span><span class="gv">⬢${c.g}${c.dugIn?`<span class="dug">+${DUG_IN}</span>`:''}</span><span class="mv">✦${c.m}</span>
     </div>${fate}
   </div>`;
 }
@@ -756,7 +778,8 @@ function render(){
   const rungLabel = run && run.current
     ? (run.current.isBoss ? 'BOSS' : `rung ${run.rung+1}/3`)
     : 'rung 1/3';
-  $('#meta').textContent = `${rungLabel} · wave ${Math.min(G.wave,WAVES)}/${WAVES}`;
+  const phaseLabel = G.phase === 'deploy' ? 'deploying' : `clash ${Math.min(G.wave,WAVES)-1}/2`;
+  $('#meta').textContent = `${rungLabel} · ${phaseLabel}`;
   $('#eName').textContent = G.them.name;
   $('#eBase').textContent = G.them.base;
   $('#pName').textContent = G.you.name;
@@ -776,12 +799,14 @@ function render(){
                : '<span class="held">CONTESTED</span>';
     const ps = laneStrike(G.you,i), es = laneStrike(G.them,i);
     const eFront = frontOf(G.them,i), pFront = frontOf(G.you,i);
-    return `<div class="lane ${sel!==null&&!busy&&!G.over?'pick':''} ${resolvingLane===i?'resolving':''}" data-lane="${i}">
-      <div class="ltot">${es?`▲${es} vs ⬢${pFront?pFront.g:'—'}`:'&nbsp;'}</div>
+    const deployed = G.phase==='deploy' && G.deployLanes.includes(i);
+    const canPick  = sel!==null && !busy && !G.over && !deployed;
+    return `<div class="lane ${canPick?'pick':''} ${deployed?'deployed':''} ${resolvingLane===i?'resolving':''}" data-lane="${i}">
+      <div class="ltot">${es?`▲${es} vs ⬢${pFront?effGuard(pFront):'—'}`:'&nbsp;'}</div>
       <div class="stack them">${eStack}</div>
       <div class="bounty">BOUNTY <b>${b}</b>${held}</div>
       <div class="stack you">${pStack}</div>
-      <div class="ltot">${ps?`▲${ps} vs ⬢${eFront?eFront.g:'—'}`:'&nbsp;'}</div>
+      <div class="ltot">${ps?`▲${ps} vs ⬢${eFront?effGuard(eFront):'—'}`:'&nbsp;'}</div>
     </div>`;
   }).join('');
 
@@ -962,17 +987,15 @@ let lastPlayerLane = null;      // public board knowledge: where you went last w
 // Generalised so either side can be scored with it — the balance harness needs a
 // "competent player" to measure against, and the fairest definition of that is
 // the same evaluator the AI uses with a neutral posture.
-function pickMove(s, foe, P, mirrorLane){
-  let best = null;
-  s.hand.forEach((card, hi)=>{
-    for(let L=0; L<3; L++){
+function scoreMove(s, foe, P, card, L, mirrorLane){
       let v = 0;
       const myStrike = laneStrike(s,L) + card.s;
       const foeFront = frontOf(foe, L);          // living front, not a corpse
       // reward breaking their front card
       if(foeFront){
-        if(myStrike >= foeFront.g*2) v += 8 + foeFront.m*1.5;
-        else if(myStrike >= foeFront.g) v += 4 + foeFront.m;
+        const fg = effGuard(foeFront);           // a braced line is harder to break
+        if(myStrike >= fg*2) v += 8 + foeFront.m*1.5;
+        else if(myStrike >= fg) v += 4 + foeFront.m;
         else v += myStrike * 0.25;
       }
       // reward claiming bounty
@@ -991,11 +1014,37 @@ function pickMove(s, foe, P, mirrorLane){
       v += P.seek * SEEK_W * (contention(foe,L) - 0.6);      // seek / avoid conflict
       if(P.mirror && mirrorLane === L) v += P.mirror * MIRROR_W;   // meet you head on
 
-      v += Math.random()*2.2;
+      return v + Math.random()*2.2;
+}
+
+// best single card+lane
+function pickMove(s, foe, P, mirrorLane){
+  let best = null;
+  s.hand.forEach((card, hi)=>{
+    for(let L=0; L<3; L++){
+      const v = scoreMove(s, foe, P, card, L, mirrorLane);
       if(!best || v > best.v) best = {v, hi, L, card};
     }
   });
   return best;
+}
+
+// Opening line: exactly one card per lane, so score every card/lane pair once
+// and assign greedily. Chosen before the player commits — neither side sees the
+// other's deployment.
+function pickDeployment(s, foe, P){
+  const cand = [];
+  s.hand.forEach((card, hi)=>{
+    for(let L=0; L<3; L++) cand.push({ hi, L, card, v: scoreMove(s, foe, P, card, L, null) });
+  });
+  cand.sort((a,b)=>b.v - a.v);
+  const out = [], usedCard = new Set(), usedLane = new Set();
+  for(const c of cand){
+    if(usedCard.has(c.hi) || usedLane.has(c.L)) continue;
+    out.push(c); usedCard.add(c.hi); usedLane.add(c.L);
+    if(out.length === 3) break;
+  }
+  return out;
 }
 
 function enemyChoose(){
@@ -1011,15 +1060,66 @@ const NEUTRAL = { mass:0.30, seek:0.30, mirror:0 };
 function computeDamage(stack, strike){
   let rem = strike; const out = [];
   for(const c of stack){
-    if(rem >= c.g*2){ out.push({c, o:'eliminated'}); rem -= c.g; }
-    else if(rem >= c.g){ out.push({c, o:'routed'}); rem -= c.g; }
+    const g = effGuard(c);
+    if(rem >= g*2){ out.push({c, o:'eliminated'}); rem -= g; }
+    else if(rem >= g){ out.push({c, o:'routed'}); rem -= g; }
     else break;                                  // can't reach past an unbroken card
   }
   return out;
 }
 
+// ── deployment: three cards, one per lane, revealed without fighting ──
+async function deployCard(lane){
+  if(G.deployLanes.includes(lane)) return;      // one card per lane
+  const card = G.you.hand.splice(sel,1)[0];
+  sel = null;
+  card.down = true;
+  card.dugIn = true;                            // braced for the first clash
+  G.you.lanes[lane].unshift(card);
+  G.deployLanes.push(lane);
+
+  const left = DEPLOY_N - G.deployLanes.length;
+  if(left){
+    say(`Laying out your line — <b>${left}</b> more, one to each remaining lane.`);
+    render();
+    return;
+  }
+  await revealDeployment();
+}
+
+async function revealDeployment(){
+  busy = true;
+  render();
+
+  // the enemy's line was chosen before you placed anything
+  for(const d of G.enemyDeploy){
+    const i = G.them.hand.indexOf(d.card);
+    if(i >= 0) G.them.hand.splice(i, 1);
+    d.card.down = true;
+    d.card.dugIn = true;
+    G.them.lanes[d.L].unshift(d.card);
+  }
+  say(`Both lines are set.`);
+  render();
+  await wait(620);
+
+  const all = [...G.you.lanes.flat(), ...G.them.lanes.flat()].filter(c=>c.down);
+  all.forEach(c=>{ delete c.down; c.reveal = true; });
+  render();
+  await wait(560);
+  all.forEach(c=>delete c.reveal);
+
+  G.phase = 'reserve';
+  G.wave = 2;
+  busy = false;
+  say(`The lines face each other — <b>no blows yet</b>. Commit a reserve, then they clash.`);
+  render();
+  tutStep(2);
+}
+
 async function place(lane){
   if(busy || sel===null) return;
+  if(G.phase === 'deploy') return deployCard(lane);
   busy = true;
   const myCard = G.you.hand.splice(sel,1)[0];
   sel = null;
@@ -1071,8 +1171,8 @@ async function place(lane){
     const yours  = p.toThem.map(x=>`${x.c.n} ${x.o==='eliminated'?'ELIMINATED':'routed'}`).join(', ');
     const theirs = p.toYou .map(x=>`${x.c.n} ${x.o==='eliminated'?'ELIMINATED':'routed'}`).join(', ');
     say(`<b>Lane ${p.L+1}</b> — `
-      + (yours  ? `your ▲${p.pS} breaks ⬢${p.eFront?p.eFront.g:'—'}: <b>${yours}</b>. ` : '')
-      + (theirs ? `their ▲${p.eS} breaks ⬢${p.pFront?p.pFront.g:'—'}: <b>${theirs}</b>.` : ''));
+      + (yours  ? `your ▲${p.pS} breaks ⬢${p.eFront?effGuard(p.eFront):'—'}: <b>${yours}</b>. ` : '')
+      + (theirs ? `their ▲${p.eS} breaks ⬢${p.pFront?effGuard(p.pFront):'—'}: <b>${theirs}</b>.` : ''));
 
     for(const {c,o} of p.toThem) markTag(c,o);
     for(const {c,o} of p.toYou)  markTag(c,o);
@@ -1086,6 +1186,9 @@ async function place(lane){
     resolvingLane = -1;
     render();
   }
+
+  // the line has taken a hit — it is no longer braced
+  if(G.wave === 2) [...G.you.lanes.flat(), ...G.them.lanes.flat()].forEach(c=>delete c.dugIn);
 
   G.wave++;
   render();
