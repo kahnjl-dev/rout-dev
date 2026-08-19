@@ -137,6 +137,7 @@
   .lane.resolving{border-color:var(--m);background:#1b1a13}
   .lane.resolving .ltot{color:var(--m)}
   .ltot.hot{color:var(--m);font-weight:700}
+  .ltot .wheel{color:var(--m);letter-spacing:.1em}
 
   /* hand */
   .handwrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:7px}
@@ -532,6 +533,13 @@ DWARVES   spread out and hold every lane</div>
 <script>
 // ═══════════════════════════════════════════════ TUNING
 const LANE_BOUNTY = [2, 3, 2];
+const LANES   = LANE_BOUNTY.length;
+const LANE_IX = [...Array(LANES).keys()];
+const emptyLanes = () => Array.from({length:LANES}, ()=>[]);
+// A unit with nothing in front of it wheels into a neighbouring fight. Cavalry
+// are built for exactly that, so they hit harder doing it.
+const CAV_FLANK = 3;
+const adjacent  = L => [L-1, L+1].filter(x => x >= 0 && x < LANES);
 const WAVES = 3;
 const HAND_SIZE = 6;      // deploy 3 + two reserves, with a little choice left over
 const DEPLOY_N  = 3;      // opening line: exactly one card per lane
@@ -711,7 +719,7 @@ function mkSide(src){
     name: src.name, base: src.base, style: src.style || 'even',
     deck: Array.from({length:COPIES}, ()=>src.deck).flat().map(c=>({...c, id:++uid})),
     hand: [],
-    lanes: [[],[],[]],   // index 0 === FRONT
+    lanes: emptyLanes(),   // index 0 of each lane === FRONT
     fallen: [],          // routed this fight
   };
 }
@@ -720,6 +728,8 @@ function mkSide(src){
 let G, sel = null, busy = false, fightNo = 1;
 let resolvingLane = -1;      // lane currently being walked through, or -1
 let pendingLane   = -1;      // lane waiting on a front/behind answer, or -1
+let flankAsk      = null;    // {lane, resolve} while aiming an unopposed lane
+let flankChoice   = {};      // the player's aim for this clash
 
 let playerFaction = 'HUMANS';
 let run = null;
@@ -735,7 +745,7 @@ function startRun(){
 function beginFight(enc){
   run.current = enc;
   const you = G.you;
-  you.lanes = [[],[],[]];
+  you.lanes = emptyLanes();
 
   if(run.lastLoss){
     // LOSS PENALTY: you lost, so some of the routed don't rally — they scatter.
@@ -817,6 +827,57 @@ const fights = (c, ix) => ix === 0 || c.t === 'arc';
 function laneStrike(side, i){
   return living(side.lanes[i]).reduce((t,c,ix)=> t + (fights(c,ix) ? c.s : 0), 0);
 }
+// the same units wheeling sideways — cavalry earn their bonus only out here
+function laneFlankStrike(side, i){
+  return living(side.lanes[i]).reduce((t,c,ix)=>
+    t + (fights(c,ix) ? c.s + (c.t==='cav' ? CAV_FLANK : 0) : 0), 0);
+}
+
+const isUnopposed  = (att, def, L) => living(att.lanes[L]).length && !living(def.lanes[L]).length;
+const unopposedOf  = (att, def)    => LANE_IX.filter(L => isUnopposed(att, def, L));
+// you may only wheel into a neighbour that actually has someone in it
+const flankTargets = (def, L)      => adjacent(L).filter(t => living(def.lanes[t]).length > 0);
+
+// Total Strike arriving in each lane, given a map of {unopposedLane: targetLane}.
+// Opposed lanes fight straight ahead; unopposed ones send their weight sideways.
+function buildAssault(att, def, assign){
+  const inc = LANE_IX.map(()=>0);
+  for(const L of LANE_IX){
+    if(!living(att.lanes[L]).length) continue;
+    if(living(def.lanes[L]).length) inc[L] += laneStrike(att, L);
+    else {
+      const t = assign[L];
+      if(t !== undefined && t !== null) inc[t] += laneFlankStrike(att, L);
+    }
+  }
+  return inc;
+}
+
+// where an unopposed lane does the most damage; used by the AI, and for the
+// player wherever only one target is legal
+function autoAssign(att, def){
+  const assign = {};
+  for(const L of unopposedOf(att, def)){
+    const opts = flankTargets(def, L);
+    if(!opts.length) continue;
+    if(opts.length === 1){ assign[L] = opts[0]; continue; }
+    const power = laneFlankStrike(att, L);
+    let best = opts[0], bestV = -Infinity;
+    for(const t of opts){
+      const front = frontOf(def, t);
+      let v = LANE_BOUNTY[t] * 0.8;
+      if(front){
+        const g = effGuard(front);
+        if(power >= g*2)      v += 9 + front.m*1.5;
+        else if(power >= g)   v += 5 + front.m;
+        else                  v += power * 0.2;
+      }
+      if(v > bestV){ bestV = v; best = t; }
+    }
+    assign[L] = best;
+  }
+  return assign;
+}
 
 function render(){
   const rungLabel = run && run.current
@@ -847,6 +908,9 @@ function render(){
                : '<span class="held">CONTESTED</span>';
     const ps = laneStrike(G.you,i), es = laneStrike(G.them,i);
     const eFront = frontOf(G.them,i), pFront = frontOf(G.you,i);
+    // a lane facing nothing will swing sideways instead of straight ahead
+    const yWheel = isUnopposed(G.you, G.them, i) && flankTargets(G.them,i).length > 0;
+    const eWheel = isUnopposed(G.them, G.you, i) && flankTargets(G.you,i).length > 0;
     const full    = present(G.you.lanes[i]).length >= LANE_CAP;
     const canPick = sel!==null && !busy && !G.over && !full;
     const choosing = pendingLane === i;
@@ -854,19 +918,30 @@ function render(){
       ${choosing ? `<div class="poschoice">
         <button class="posbtn" data-pos="1">FRONT</button>
         <button class="posbtn" data-pos="0">BEHIND</button></div>` : ''}
-      <div class="ltot">${es?`▲${es} vs ⬢${pFront?effGuard(pFront):'—'}`:'&nbsp;'}</div>
+      ${flankAsk && flankAsk.lane===i ? `<div class="poschoice">
+        ${flankTargets(G.them,i).map(t=>`<button class="posbtn flankbtn" data-tgt="${t}">${t<i?'⟵ LANE '+(t+1):'LANE '+(t+1)+' ⟶'}</button>`).join('')}
+      </div>` : ''}
+      <div class="ltot">${eWheel ? `▲${laneFlankStrike(G.them,i)} <span class="wheel">wheels</span>` : (es?`▲${es} vs ⬢${pFront?effGuard(pFront):'—'}`:'&nbsp;')}</div>
       <div class="stack them">${eStack}</div>
       <div class="bounty">BOUNTY <b>${b}</b>${held}</div>
       <div class="stack you">${pStack}</div>
-      <div class="ltot">${ps?`▲${ps} vs ⬢${eFront?effGuard(eFront):'—'}`:'&nbsp;'}</div>
+      <div class="ltot">${yWheel ? `▲${laneFlankStrike(G.you,i)} <span class="wheel">wheels</span>` : (ps?`▲${ps} vs ⬢${eFront?effGuard(eFront):'—'}`:'&nbsp;')}</div>
     </div>`;
   }).join('');
 
   document.querySelectorAll('.lane').forEach(el=>{
     el.onclick = ()=>{ if(sel!==null && !busy && !G.over) place(+el.dataset.lane); };
   });
-  document.querySelectorAll('.posbtn').forEach(b=>{
+  document.querySelectorAll('.posbtn[data-pos]').forEach(b=>{
     b.onclick = ev=>{ ev.stopPropagation(); placeAt(pendingLane, b.dataset.pos === '1'); };
+  });
+  document.querySelectorAll('.flankbtn').forEach(b=>{
+    b.onclick = ev=>{
+      ev.stopPropagation();
+      const L = flankAsk.lane, r = flankAsk.resolve;
+      flankChoice[L] = +b.dataset.tgt;
+      flankAsk = null; r();
+    };
   });
 
   $('#hand').innerHTML = G.you.hand.map((c,i)=>`
@@ -1076,8 +1151,8 @@ function scoreMove(s, foe, P, card, L, mirrorLane){
 function pickMove(s, foe, P, mirrorLane){
   let best = null;
   s.hand.forEach((card, hi)=>{
-    for(let L=0; L<3; L++){
-      if(living(s.lanes[L]).length >= LANE_CAP) continue;   // lane is full
+    for(let L=0; L<LANES; L++){
+      if(present(s.lanes[L]).length >= LANE_CAP) continue;   // lane is full
       const v = scoreMove(s, foe, P, card, L, mirrorLane);
       if(!best || v > best.v) best = {v, hi, L, card};
     }
@@ -1091,7 +1166,7 @@ function pickMove(s, foe, P, mirrorLane){
 function pickDeployment(s, foe, P){
   const cand = [];
   s.hand.forEach((card, hi)=>{
-    for(let L=0; L<3; L++) cand.push({ hi, L, card, v: scoreMove(s, foe, P, card, L, null) });
+    for(let L=0; L<LANES; L++) cand.push({ hi, L, card, v: scoreMove(s, foe, P, card, L, null) });
   });
   cand.sort((a,b)=>b.v - a.v);
   const out = [], usedCard = new Set(), perLane = [0,0,0];
@@ -1187,6 +1262,22 @@ function placeAt(lane, atFront){
   return G.phase === 'deploy' ? deployCard(lane, atFront) : commitReserve(lane, atFront);
 }
 
+// Walk the player through aiming each unopposed lane that has more than one
+// legal neighbour. Lanes with a single option are settled by autoAssign.
+async function askFlanks(){
+  flankChoice = {};
+  const needAim = unopposedOf(G.you, G.them).filter(L => flankTargets(G.them, L).length > 1);
+  for(const L of needAim){
+    await new Promise(res=>{
+      flankAsk = { lane:L, resolve:res };
+      say(`<b>Lane ${L+1}</b> faces nothing. Wheel it into which neighbour?`);
+      render();
+    });
+  }
+  flankAsk = null;
+  render();
+}
+
 async function commitReserve(lane, atFront){
   busy = true;
   const myCard = G.you.hand.splice(sel,1)[0];
@@ -1220,13 +1311,24 @@ async function commitReserve(lane, atFront){
   // Outcomes are computed for ALL lanes now, before anything is shown — combat
   // is simultaneous. Only the presentation below is sequential, so the player
   // can follow one lane at a time and reconstruct why it went the way it did.
+  // any of your lanes facing nothing must wheel into a neighbour; ask where it
+  // has a real choice, otherwise the single legal target is taken for you
+  await askFlanks();
+
+  const yourAim  = { ...autoAssign(G.you, G.them), ...flankChoice };
+  const theirAim = autoAssign(G.them, G.you);
+  const incThem  = buildAssault(G.you,  G.them, yourAim);
+  const incYou   = buildAssault(G.them, G.you,  theirAim);
+
   const plan = [];
-  for(let L=0; L<3; L++){
+  for(const L of LANE_IX){
     plan.push({ L,
-      pS: laneStrike(G.you,L), eS: laneStrike(G.them,L),
+      pS: incThem[L], eS: incYou[L],
       pFront: frontOf(G.you,L), eFront: frontOf(G.them,L),
-      toThem: computeDamage(living(G.them.lanes[L]), laneStrike(G.you,L)),
-      toYou:  computeDamage(living(G.you.lanes[L]),  laneStrike(G.them,L)) });
+      flankedIn:  LANE_IX.filter(f=>yourAim[f]===L),
+      flankedOut: LANE_IX.filter(f=>theirAim[f]===L),
+      toThem: computeDamage(living(G.them.lanes[L]), incThem[L]),
+      toYou:  computeDamage(living(G.you.lanes[L]),  incYou[L]) });
   }
 
   const active = plan.filter(p=>p.toThem.length || p.toYou.length);
@@ -1240,9 +1342,11 @@ async function commitReserve(lane, atFront){
     resolvingLane = p.L;
     const yours  = p.toThem.map(x=>`${x.c.n} ${x.o==='eliminated'?'ELIMINATED':'routed'}`).join(', ');
     const theirs = p.toYou .map(x=>`${x.c.n} ${x.o==='eliminated'?'ELIMINATED':'routed'}`).join(', ');
+    const wheeledIn  = p.flankedIn.length  ? ` (incl. lane ${p.flankedIn.map(f=>f+1).join(' & ')} wheeling in)`  : '';
+    const wheeledOut = p.flankedOut.length ? ` (incl. lane ${p.flankedOut.map(f=>f+1).join(' & ')} wheeling in)` : '';
     say(`<b>Lane ${p.L+1}</b> — `
-      + (yours  ? `your ▲${p.pS} breaks ⬢${p.eFront?effGuard(p.eFront):'—'}: <b>${yours}</b>. ` : '')
-      + (theirs ? `their ▲${p.eS} breaks ⬢${p.pFront?effGuard(p.pFront):'—'}: <b>${theirs}</b>.` : ''));
+      + (yours  ? `your ▲${p.pS}${wheeledIn} breaks ⬢${p.eFront?effGuard(p.eFront):'—'}: <b>${yours}</b>. ` : '')
+      + (theirs ? `their ▲${p.eS}${wheeledOut} breaks ⬢${p.pFront?effGuard(p.pFront):'—'}: <b>${theirs}</b>.` : ''));
 
     for(const {c,o} of p.toThem) markTag(c,o);
     for(const {c,o} of p.toYou)  markTag(c,o);
@@ -1306,12 +1410,12 @@ function finish(){
   rows.push(['Leader morale', G.you.base, G.them.base]);
 
   let yField=0, tField=0;
-  for(let L=0;L<3;L++){ yField += laneMorale(G.you,L); tField += laneMorale(G.them,L); }
+  for(let L=0;L<LANES;L++){ yField += laneMorale(G.you,L); tField += laneMorale(G.them,L); }
   yTot += yField; tTot += tField;
   rows.push(['Surviving cards', yField, tField]);
 
   let yB=0, tB=0, detail=[];
-  for(let L=0;L<3;L++){
+  for(let L=0;L<LANES;L++){
     const pm = laneMorale(G.you,L), em = laneMorale(G.them,L);
     if(pm>em){ yB += LANE_BOUNTY[L]; detail.push(`L${L+1}→you`); }
     else if(em>pm){ tB += LANE_BOUNTY[L]; detail.push(`L${L+1}→them`); }
@@ -1325,8 +1429,8 @@ function finish(){
   let won;
   if(yTot !== tTot) won = yTot > tTot;
   else {
-    const yc = [0,1,2].reduce((t,L)=>t+living(G.you.lanes[L]).length,0);
-    const tc = [0,1,2].reduce((t,L)=>t+living(G.them.lanes[L]).length,0);
+    const yc = LANE_IX.reduce((t,L)=>t+living(G.you.lanes[L]).length,0);
+    const tc = LANE_IX.reduce((t,L)=>t+living(G.them.lanes[L]).length,0);
     won = yc > tc;
     tieNote = yc===tc
       ? ' · morale and cards tied — the defender holds'
