@@ -301,6 +301,26 @@
   .rungstrip i.lost{color:var(--them)}
   .rungstrip i.now{color:var(--m)}
   /* ---- hand-drawn coach marks ---- */
+  /* ---- combat effects: who hit whom ---- */
+  #fxLayer{position:fixed;inset:0;z-index:40;pointer-events:none}
+  #fxSvg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .strike{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:2.6}
+  .strike.head{stroke:#ff6b4a}
+  .strike.flank{stroke:#ffc44a}
+  /* glow rather than transform, so it cannot fight the routed card's rotation */
+  .c.lunge{box-shadow:0 0 0 2px var(--s), 0 0 16px rgba(255,107,74,.55)}
+  .c.impact{animation:impact .34s ease-out}
+  .c.impact-held{animation:impactHeld .3s ease-out}
+  @keyframes impact{
+    0%{box-shadow:none}
+    28%{box-shadow:0 0 0 3px var(--s), 0 0 22px rgba(255,107,74,.7)}
+    100%{box-shadow:none}
+  }
+  @keyframes impactHeld{
+    0%{box-shadow:none}
+    35%{box-shadow:0 0 0 2px var(--you), 0 0 14px rgba(126,224,168,.5)}
+    100%{box-shadow:none}
+  }
   #coachLayer{position:fixed;inset:0;z-index:60;pointer-events:none}
   #coachLayer.hide{display:none}
   #coachSvg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
@@ -459,6 +479,8 @@
 
 <div class="overlay hide" id="branchPick"><div class="pickbox" id="branchBox"></div></div>
 <div class="overlay hide" id="runEnd"><div class="pickbox" id="runEndBox"></div></div>
+
+<div id="fxLayer"><svg id="fxSvg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg></div>
 
 <div id="coachLayer" class="hide">
   <svg id="coachSvg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
@@ -889,7 +911,7 @@ function buildAssault(att, def, assign){
       if(!fights(c, ix)) return;
       const bonus = (!opposed && c.t === 'cav') ? CAV_FLANK : 0;
       inc[target].total += c.s + bonus;
-      inc[target].parts.push({ name:c.n, type:c.t, base:c.s, bonus, from:L, wheeled:!opposed, rank:ix });
+      inc[target].parts.push({ c, name:c.n, type:c.t, base:c.s, bonus, from:L, wheeled:!opposed, rank:ix });
     });
   }
   return inc;
@@ -1037,6 +1059,77 @@ function releaseTap(){
   const r = tapGate; tapGate = null;
   $('#contbar').classList.add('hide');
   r();
+}
+
+// ── combat animation: draw the blow from attacker to defender ──────────────
+const cardEl   = c => document.querySelector(`.c[data-id="${c.id}"]`);
+const centerOf = el => { const r = el.getBoundingClientRect(); return [r.left+r.width/2, r.top+r.height/2]; };
+
+function strikeArc(x1,y1,x2,y2,bow){
+  const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy)||1;
+  const nx=-dy/len, ny=dx/len;
+  return `M${x1},${y1} Q${x1+dx*0.5+nx*bow},${y1+dy*0.5+ny*bow} ${x2},${y2}`;
+}
+
+function drawStrike(x1,y1,x2,y2,isFlank){
+  const svg = $('#fxSvg');
+  const g   = document.createElementNS('http://www.w3.org/2000/svg','g');
+  const p   = document.createElementNS('http://www.w3.org/2000/svg','path');
+  // a wheeling blow arcs across lanes; a head-on one goes almost straight
+  p.setAttribute('d', strikeArc(x1,y1,x2,y2, isFlank ? 46 : 8));
+  p.setAttribute('class', 'strike ' + (isFlank ? 'flank' : 'head'));
+  g.appendChild(p); svg.appendChild(g);
+
+  const len = p.getTotalLength();
+  p.style.strokeDasharray = len;
+  p.animate([{strokeDashoffset:len},{strokeDashoffset:0}],{duration:210,easing:'cubic-bezier(.3,.8,.4,1)',fill:'forwards'});
+
+  // arrowhead, aimed along the final approach
+  const near = p.getPointAtLength(Math.max(0,len-12));
+  const ux=(x2-near.x)/(Math.hypot(x2-near.x,y2-near.y)||1), uy=(y2-near.y)/(Math.hypot(x2-near.x,y2-near.y)||1);
+  const h = document.createElementNS('http://www.w3.org/2000/svg','path');
+  h.setAttribute('d', `M${x2-ux*11+uy*6},${y2-uy*11-ux*6} L${x2},${y2} L${x2-ux*11-uy*6},${y2-uy*11+ux*6}`);
+  h.setAttribute('class', p.getAttribute('class'));
+  h.style.opacity = 0;
+  g.appendChild(h);
+  h.animate([{opacity:0},{opacity:1}],{duration:120,delay:190,fill:'forwards'});
+
+  setTimeout(()=>{ g.animate([{opacity:1},{opacity:0}],{duration:280,fill:'forwards'});
+                   setTimeout(()=>g.remove(), 300); }, 560);
+}
+
+// one side's blows into one lane, then the damage cascading front to back
+async function playAssault(parts, defenders, trace){
+  if(!parts.length || !defenders.length) return;
+  const tEl = cardEl(defenders[0]);
+  if(!tEl) return;
+  const [tx,ty] = centerOf(tEl);
+
+  for(const p of parts){
+    const aEl = cardEl(p.c);
+    if(!aEl) continue;
+    const [ax,ay] = centerOf(aEl);
+    drawStrike(ax, ay, tx, ty, p.wheeled);
+    aEl.classList.add('lunge');
+    setTimeout(()=>aEl.classList.remove('lunge'), 280);
+    await wait(130);
+  }
+  await wait(180);
+
+  // flash each defender in turn — this is the overflow made visible
+  for(const t of trace){
+    const el = cardEl(t.c);
+    if(!el) continue;
+    const cls = t.o === 'held' ? 'impact-held' : 'impact';
+    el.classList.add(cls);
+    await wait(t.o === 'held' ? 210 : 280);
+    el.classList.remove(cls);
+  }
+}
+
+async function playClash(p){
+  await playAssault(p.pParts, living(G.them.lanes[p.L]), p.traceThem);
+  await playAssault(p.eParts, living(G.you.lanes[p.L]),  p.traceYou);
 }
 
 // One line per contributing unit, then one line per defender, so every point of
@@ -1442,6 +1535,10 @@ async function commitReserve(lane, atFront){
   for(let i=0; i<active.length; i++){
     const p = active[i];
     resolvingLane = p.L;
+    render();                                    // clean board first — no tags yet
+    say(`<div class="clashhead">LANE ${p.L+1}</div><span style="color:var(--faint)">…</span>`);
+    await playClash(p);                          // arrows, lunges, impacts
+
     for(const {c,o} of p.toThem) markTag(c,o);
     for(const {c,o} of p.toYou)  markTag(c,o);
     render();
