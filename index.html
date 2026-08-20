@@ -618,7 +618,7 @@ const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
 // Every faction is playable by either side. Base morale is the ONLY faction axis —
 // all decks total 30 card morale so the two never compound. See assertDecks().
 const FACTIONS = {
-  HUMANS:{ name:'HUMANS', base:10, style:'contest', col:'#7f9fd0', tag:'H',
+  HUMANS:{ name:'HUMANS', base:10, col:'#7f9fd0', tag:'H',
     blurb:'Every arm, and an edge in none. They come straight at you.', deck:[
     {n:'KNIGHTS',   t:'cav', s:7, g:3, m:2},
     {n:'SWORDSMEN', t:'inf', s:5, g:4, m:3},
@@ -627,7 +627,7 @@ const FACTIONS = {
     {n:'SPEARMEN',  t:'inf', s:3, g:6, m:5},
     {n:'THE BANNER',t:'inf', s:1, g:7, m:7},
   ]},
-  GOBLINS:{ name:'GOBLINS', base:9, style:'raid', col:'#8fc46a', tag:'G',
+  GOBLINS:{ name:'GOBLINS', base:9, col:'#8fc46a', tag:'G',
     blurb:'Half of them mounted. They go round your line, not through it.', deck:[
     {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:2},
     {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:3},
@@ -636,7 +636,7 @@ const FACTIONS = {
     {n:'SPEAR MOB',    t:'inf', s:2, g:6, m:5},
     {n:'THE IDOL',     t:'inf', s:1, g:7, m:7},
   ]},
-  DWARVES:{ name:'DWARVES', base:12, style:'wall', col:'#d9a05b', tag:'D',
+  DWARVES:{ name:'DWARVES', base:12, col:'#d9a05b', tag:'D',
     blurb:'No horse in the hold. They stack deep and refuse to move.', deck:[
     {n:'HAMMERERS',   t:'inf', s:5, g:5, m:2},
     {n:'CROSSBOWS',   t:'arc', s:5, g:4, m:4},
@@ -781,7 +781,7 @@ let uid = 0;
 
 function mkSide(src){
   return {
-    name: src.name, base: src.base, style: src.style || 'even',
+    name: src.name, base: src.base,
     deck: Array.from({length:COPIES}, ()=>src.deck).flat().map(c=>({...c, id:++uid})),
     hand: [],
     lanes: emptyLanes(),   // index 0 of each lane === FRONT
@@ -839,7 +839,6 @@ function beginFight(enc){
   G.them.hand  = G.them.deck.slice(0, HAND_SIZE);
 
   G.wave = 1; G.over = false; sel = null; busy = false;
-  lastPlayerLane = null;
 
   // Wave 1 is deployment: both sides lay out a line, one card per lane, and it
   // reveals WITHOUT fighting. The enemy's line is chosen now, before the player
@@ -848,8 +847,7 @@ function beginFight(enc){
   G.deployed = 0;
   pendingLane = -1;
   flankAsk = null; flankChoice = {};
-  const eP = POSTURE[G.them.style] || POSTURE.contest;
-  G.enemyDeploy = pickDeployment(G.them, G.you, eP).map(c=>({card:c.card, L:c.L}));
+  G.enemyDeploy = pickDeployment(G.them, G.you).map(c=>({card:c.card, L:c.L, back:c.back}));
 
   $('#endSlot').innerHTML = '';
   hideOverlays();
@@ -1271,14 +1269,19 @@ addEventListener('resize', ()=>{ if(tut.on && tut.cur) drawCoach(); });
 // One dominant axis each. Trying to make a faction both concentrate AND chase
 // the fight fails — measured, the two move strictly inversely — so each faction
 // owns a different axis and the three read as different KINDS of opponent.
-const POSTURE = {
-  contest:{ mass: 0.20, seek: 1.00, mirror:0.35 },  // HUMANS   every arm, so meet them head on
-  raid:   { mass: 0.55, seek:-1.00, mirror:0.00 },  // GOBLINS  mounted — take open ground and wheel
-  wall:   { mass: 1.10, seek: 0.20, mirror:0.00 },  // DWARVES  no horse, so stack deep and hold
+// Posture belongs to the UNIT, not the faction. A warband behaves the way it
+// does because of what it is made of: Dwarves contest and stack because they
+// are infantry and archers, Goblins hunt gaps because half of them are mounted.
+// Nothing here is set per faction — their identities fall out of their decks.
+const UNIT_POSTURE = {
+  inf:{ mass: 0.30, seek: 1.00, back:-0.60 },   // form the line and hold it
+  arc:{ mass: 1.30, seek: 0.10, back: 1.20 },   // get in behind somebody
+  cav:{ mass:-0.70, seek:-1.10, back:-1.20 },   // find the hole and lead through it
 };
+const postureOf = c => UNIT_POSTURE[c.t] || UNIT_POSTURE.inf;
 // seek beats a one-card commitment but loses to a two-card one, so a conflict-
 // seeker walks toward you on wave 2 and then piles on rather than squatting.
-let MASS_W = 6.0, SEEK_W = 6.0, MIRROR_W = 1.6;   // let, so they can be swept live
+let MASS_W = 6.0, SEEK_W = 6.0;   // let, so they can be swept live
 const BMIN = Math.min(...LANE_BOUNTY), BSPAN = Math.max(...LANE_BOUNTY) - BMIN || 1;
 
 // How much of a fight is this lane likely to be? If they're already standing
@@ -1297,12 +1300,12 @@ function contention(foe, L){
   return n ? n : 0.45 * (LANE_BOUNTY[L] - BMIN) / BSPAN;
 }
 
-let lastPlayerLane = null;      // public board knowledge: where you went last wave
 
 // Generalised so either side can be scored with it — the balance harness needs a
 // "competent player" to measure against, and the fairest definition of that is
 // the same evaluator the AI uses with a neutral posture.
-function scoreMove(s, foe, P, card, L, mirrorLane){
+function scoreMove(s, foe, card, L){
+      const P = postureOf(card);
       let v = 0;
       const myStrike = laneStrike(s,L) + card.s;
       const foeFront = frontOf(foe, L);          // living front, not a corpse
@@ -1326,19 +1329,23 @@ function scoreMove(s, foe, P, card, L, mirrorLane){
       else if(threat >= card.g) v -= 2 + card.m*0.5;
       // ── faction posture ──
       v += P.mass * MASS_W * living(s.lanes[L]).length;      // concentrate / fan out
+      // a unit that wants the second rank cares WHAT it is standing behind —
+      // otherwise archers happily stack on archers and the front one evaporates
+      if(P.back > 0){
+        const cover = frontOf(s, L);
+        v += cover ? (cover.g - 4) * 2.4 : -3.5;
+      }
       v += P.seek * SEEK_W * (contention(foe,L) - 0.6);      // seek / avoid conflict
-      if(P.mirror && mirrorLane === L) v += P.mirror * MIRROR_W;   // meet you head on
-
       return v + Math.random()*2.2;
 }
 
 // best single card+lane
-function pickMove(s, foe, P, mirrorLane){
+function pickMove(s, foe){
   let best = null;
   s.hand.forEach((card, hi)=>{
     for(let L=0; L<LANES; L++){
       if(present(s.lanes[L]).length >= LANE_CAP) continue;   // lane is full
-      const v = scoreMove(s, foe, P, card, L, mirrorLane);
+      const v = scoreMove(s, foe, card, L);
       if(!best || v > best.v) best = {v, hi, L, card};
     }
   });
@@ -1348,7 +1355,7 @@ function pickMove(s, foe, P, mirrorLane){
 // Opening line: exactly one card per lane, so score every card/lane pair once
 // and assign greedily. Chosen before the player commits — neither side sees the
 // other's deployment.
-function pickDeployment(s, foe, P){
+function pickDeployment(s, foe){
   // Placed one at a time against the line as it stands. Scoring all four up
   // front against an empty board made the "mass" term dead weight — a faction
   // that wants to stack could never see that it already held a lane.
@@ -1360,25 +1367,25 @@ function pickDeployment(s, foe, P){
       if(usedCard.has(hi)) return;
       for(const L of LANE_IX){
         if(s.lanes[L].length >= LANE_CAP) continue;
-        const v = scoreMove(s, foe, P, card, L, null);
+        const v = scoreMove(s, foe, card, L);
         if(!best || v > best.v) best = { v, hi, L, card };
       }
     });
     if(!best) break;
+    // an archer slots in behind cover; everything else leads
+    best.back = postureOf(best.card).back > 0 && s.lanes[best.L].length > 0;
     out.push(best); usedCard.add(best.hi);
-    s.lanes[best.L].unshift(best.card);        // the next choice can see it
+    if(best.back) s.lanes[best.L].push(best.card);
+    else          s.lanes[best.L].unshift(best.card);   // the next choice can see it
   }
   s.lanes = backup;                            // the real board is untouched
   return out;
 }
 
 function enemyChoose(){
-  const P = POSTURE[G.them.style] || POSTURE.contest;
-  return pickMove(G.them, G.you, P, lastPlayerLane);
+  return pickMove(G.them, G.you);
 }
 
-// a posture-free opponent, used only by the balance harness as "competent play"
-const NEUTRAL = { mass:0.30, seek:0.30, mirror:0 };
 
 // ═══════════════════════════════════════════════ RESOLUTION
 // returns [{card, outcome}] applied front-to-back
@@ -1421,7 +1428,7 @@ async function revealDeployment(){
     if(i >= 0) G.them.hand.splice(i, 1);
     d.card.down = true;
     d.card.dugIn = true;
-    G.them.lanes[d.L].unshift(d.card);
+    if(d.back) G.them.lanes[d.L].push(d.card); else G.them.lanes[d.L].unshift(d.card);
   }
   say(`Both lines are set.`);
   render();
@@ -1487,10 +1494,9 @@ async function commitReserve(lane, atFront){
   // ── 1. both commit, face down ──
   myCard.down = foeCard.down = true;
   if(atFront) G.you.lanes[lane].unshift(myCard); else G.you.lanes[lane].push(myCard);
-  // the AI shelters archers behind an existing unit; everything else leads
-  const foeBack = foeCard.t === 'arc' && living(G.them.lanes[pick.L]).length > 0;
+  // same preference drives reserves: archers seek cover, the rest lead
+  const foeBack = postureOf(foeCard).back > 0 && present(G.them.lanes[pick.L]).length > 0;
   if(foeBack) G.them.lanes[pick.L].push(foeCard); else G.them.lanes[pick.L].unshift(foeCard);
-  lastPlayerLane = lane;      // set AFTER the AI chose — it never sees this wave
   say(`Wave ${G.wave} — both committed. Neither of you can see the other.`);
   render();
   await wait(560);
