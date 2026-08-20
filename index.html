@@ -608,10 +608,14 @@ const adjacent  = L => [L-1, L+1].filter(x => x >= 0 && x < LANES);
 const WAVES = 3;
 const HAND_SIZE = 7;      // deploy 4 + two reserves, with a little choice left over
 const DEPLOY_N  = 4;      // opening line, at most two to any one lane
-// A prepared line is braced for the first clash. Without this, ~80% of all
-// destruction happened in clash 1 and the reserve arrived too late to matter;
-// at +2 the split is ~60/40 and the reserve changes the result a third of the time.
-const DUG_IN    = 2;
+// A prepared line is braced for the first clash. Re-checked after the rank
+// rules landed, on the theory it might no longer be earning its place: it is.
+// At +0 the first clash still takes 67% of all destruction and the nine
+// matchups spread 38-71%. At +3 the split is even and the spread is 42-56%.
+// A flat Guard bonus is worth proportionally more to a fragile unit — +3 on a
+// goblin's 3 doubles it, on a dwarf's 7 it is a 43% bump — so it also pulls
+// the factions together rather than favouring the tough ones.
+let DUG_IN      = 3;   // let, so it can be swept live
 const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
 const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
 
