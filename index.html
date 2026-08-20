@@ -176,16 +176,11 @@
   .assault .bon{color:var(--m)}
   .assault .sep{height:1px;background:var(--line);margin:5px 0 4px 9px}
   .elim{color:var(--s)} .rout{color:var(--m)} .held{color:var(--you)}
-
-  .contbar{
-    width:100%;margin-top:6px;background:#12161c;border:1px solid var(--m);
-    color:var(--m);border-radius:8px;padding:11px;font-family:inherit;
-    font-size:10.5px;letter-spacing:.18em;cursor:pointer;
-    animation:pulsebar 1.6s ease-in-out infinite;
+  .nextup{
+    margin-top:9px;padding-top:8px;border-top:1px solid var(--line);
+    font-size:11.5px;letter-spacing:.06em;color:var(--m);
   }
-  .contbar.hide{display:none}
-  .contbar:active{transform:scale(.99)}
-  @keyframes pulsebar{0%,100%{border-color:rgba(255,196,74,.85)}50%{border-color:rgba(255,196,74,.3)}}
+
 
   /* end panel */
   .end{margin-top:7px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px}
@@ -448,7 +443,6 @@
   </div>
 
   <div class="msg" id="msg"></div>
-  <button class="contbar hide" id="contbar">TAP TO CONTINUE</button>
   <div id="endSlot"></div>
 
   <div class="ctrls">
@@ -836,8 +830,7 @@ function beginFight(enc){
   G.phase = 'deploy';
   G.deployed = 0;
   pendingLane = -1;
-  tapGate = null; flankAsk = null; flankChoice = {};
-  $('#contbar').classList.add('hide');
+  flankAsk = null; flankChoice = {};
   const eP = POSTURE[G.them.style] || POSTURE.mass;
   G.enemyDeploy = pickDeployment(G.them, G.you, eP).map(c=>({card:c.card, L:c.L}));
 
@@ -1043,23 +1036,6 @@ function render(){
 }
 function say(t){ $('#msg').innerHTML = t; }
 
-// Hold until the player is ready. The clash used to play itself on a timer,
-// which made a four-step causality chain impossible to follow.
-let tapGate = null;
-function awaitTap(label){
-  return new Promise(res=>{
-    tapGate = res;
-    const b = $('#contbar');
-    b.textContent = label || 'TAP TO CONTINUE';
-    b.classList.remove('hide');
-  });
-}
-function releaseTap(){
-  if(!tapGate) return;
-  const r = tapGate; tapGate = null;
-  $('#contbar').classList.add('hide');
-  r();
-}
 
 // ── combat animation: draw the blow from attacker to defender ──────────────
 const cardEl   = c => document.querySelector(`.c[data-id="${c.id}"]`);
@@ -1528,7 +1504,7 @@ async function commitReserve(lane, atFront){
   const active = plan.filter(p=>p.pParts.length || p.eParts.length);
   if(!active.length){
     say(`<div class="clashhead">THE CLASH</div>Neither line can reach the other.`);
-    await awaitTap();
+    await wait(900);
   }
 
   // ── 3. resolve, one lane at a time, at the player's pace ──
@@ -1549,7 +1525,9 @@ async function commitReserve(lane, atFront){
       + assaultHTML('You strike for', p.pS, p.pParts, p.traceThem)
       + assaultHTML('They strike for', p.eS, p.eParts, p.traceYou));
 
-    await awaitTap(i < active.length-1 ? `NEXT LANE  ▶` : `RESOLVE  ▶`);
+    // the animation carried the beat; this is just long enough to read the tally
+    const broken = p.toThem.length + p.toYou.length;
+    await wait(Math.min(1300, 620 + broken*150));
 
     applyOutcomes(G.them, p.L, p.toThem);
     applyOutcomes(G.you,  p.L, p.toYou);
@@ -1566,7 +1544,12 @@ async function commitReserve(lane, atFront){
   if(G.wave === 3) tutStep(3);
 
   if(G.wave > WAVES){ await wait(350); finish(); }
-  else busy = false;
+  else {
+    busy = false;
+    // keep the tally on screen while they decide — appended, not replaced
+    $('#msg').innerHTML += `<div class="nextup">Commit your next reserve.</div>`;
+    render();
+  }
 }
 
 function markTag(c,o){ c._tag = o; }
@@ -1852,7 +1835,6 @@ function showPicker(){
 const openRules = ()=>$('#rulesOv').classList.remove('hide');
 const openLog   = ()=>{ $('#logOv').classList.remove('hide'); $('#logOv').scrollTop = 0; };
 
-$('#contbar').onclick    = releaseTap;
 $('#restart').onclick    = showPicker;
 $('#help').onclick       = openRules;
 $('#openRules').onclick  = openRules;
