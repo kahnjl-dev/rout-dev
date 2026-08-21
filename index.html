@@ -615,7 +615,20 @@ const DEPLOY_N  = 4;      // opening line, at most two to any one lane
 // A flat Guard bonus is worth proportionally more to a fragile unit — +3 on a
 // goblin's 3 doubles it, on a dwarf's 7 it is a 43% bump — so it also pulls
 // the factions together rather than favouring the tough ones.
-let DUG_IN      = 3;   // let, so it can be swept live
+// Foot troops brace, plant stakes and dress the line; horse does not — cavalry
+// standing still is cavalry wasted. So the opening bonus is foot only.
+// Cutting it from cavalry and giving nothing back was measured and it wrecks the
+// game: the bonus becomes a per-deck subsidy, so the all-foot Dwarves beat the
+// half-mounted Goblins 79-19 and the nine matchups spread 60 points. Adding
+// Strike back (a charge bonus) does not fix it — Goblins do not need to hit
+// harder in clash 1, they need to still be there for clash 2.
+// So opening-line cavalry SCREEN instead: they cannot be broken in the first
+// clash at all. They are not standing and taking it, they are riding. That
+// restores the spread to 12 points, and it is the same idea stated honestly for
+// each arm — foot holds ground by digging into it, horse by not being there.
+let DUG_IN      = 2;   // let, so it can be swept live
+const canDigIn  = c => c.t !== 'cav';
+const canScreen = c => c.t === 'cav';
 const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
 const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
 
@@ -631,7 +644,8 @@ const FACTIONS = {
     {n:'SPEARMEN',  t:'inf', s:3, g:6, m:5},
     {n:'THE BANNER',t:'inf', s:1, g:7, m:7},
   ]},
-  GOBLINS:{ name:'GOBLINS', base:9, col:'#8fc46a', tag:'G',
+  // 9 -> 7: screening cavalry is worth real morale, and half their deck has it
+  GOBLINS:{ name:'GOBLINS', base:7, col:'#8fc46a', tag:'G',
     blurb:'Half of them mounted. They go round your line, not through it.', deck:[
     {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:2},
     {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:3},
@@ -874,7 +888,7 @@ function cardHTML(c, who, isFront, isFighting){
   return `<div class="${cls}" data-id="${c.id}">
     <div class="nm"><span class="ty t-${c.t}">${TYPE[c.t].label}</span>${c.n}</div>
     <div class="st">
-      <span class="sv ${isFighting===false?'idle':''}">▲${c.s}</span><span class="gv">⬢${c.g}${c.dugIn?`<span class="dug">+${DUG_IN}</span>`:''}</span><span class="mv">✦${c.m}</span>
+      <span class="sv ${isFighting===false?'idle':''}">▲${c.s}</span><span class="gv">⬢${c.g}${c.dugIn?`<span class="dug">+${DUG_IN}</span>`:''}${c.screen?`<span class="dug" title="screening — cannot be broken this clash">↺</span>`:''}</span><span class="mv">✦${c.m}</span>
     </div>${fate}
   </div>`;
 }
@@ -1140,9 +1154,10 @@ function assaultHTML(who, total, parts, trace){
   const res = trace.map(t=>{
     const v = t.o==='eliminated' ? '<b class="elim">ELIMINATED</b>'
             : t.o==='routed'     ? '<b class="rout">ROUTED</b>'
+            : t.o==='screened'   ? '<b class="held">RIDES CLEAR</b>'
                                  : '<b class="held">HOLDS</b>';
     return `<div class="ln"><span class="nmx">${t.c.n}</span>`
-         + `<span class="why">${t.had} against ⬢${t.g}${t.c.dugIn?' (dug in)':''}</span>`
+         + `<span class="why">${t.had} against ⬢${t.g}${t.c.dugIn?' (dug in)':''}${t.c.screen?' (screening)':''}</span>`
          + `<span class="num">${v}</span></div>`;
   }).join('');
   return `<div class="assault"><div class="ahead">${who} <b>▲${total}</b></div>${rows}`
@@ -1314,7 +1329,9 @@ function scoreMove(s, foe, card, L){
       const myStrike = laneStrike(s,L) + card.s;
       const foeFront = frontOf(foe, L);          // living front, not a corpse
       // reward breaking their front card
-      if(foeFront){
+      if(foeFront && foeFront.screen){
+        v += myStrike * 0.10;                    // nothing to break — it rides clear
+      } else if(foeFront){
         const fg = effGuard(foeFront);           // a braced line is harder to break
         if(myStrike >= fg*2) v += 8 + foeFront.m*1.5;
         else if(myStrike >= fg) v += 4 + foeFront.m;
@@ -1397,6 +1414,9 @@ function computeDamage(stack, strike, trace){
   let rem = strike; const out = [];
   for(const c of stack){
     const g = effGuard(c);
+    // screening cavalry absorbs the blow and rides clear — it soaks the same Guard
+    // and lets the overflow through, it just doesn't break
+    if(c.screen && rem >= g){ if(trace) trace.push({c,o:'screened',had:rem,g}); rem -= g; continue; }
     if(rem >= g*2){ out.push({c, o:'eliminated'}); if(trace) trace.push({c,o:'eliminated',had:rem,g}); rem -= g; }
     else if(rem >= g){ out.push({c, o:'routed'});  if(trace) trace.push({c,o:'routed',   had:rem,g}); rem -= g; }
     else { if(trace) trace.push({c,o:'held',had:rem,g}); break; }   // can't reach past an unbroken card
@@ -1409,7 +1429,8 @@ async function deployCard(lane, atFront){
   const card = G.you.hand.splice(sel,1)[0];
   sel = null;
   card.down = true;
-  card.dugIn = true;                            // braced for the first clash
+  if(canDigIn(card)) card.dugIn  = true;        // foot braces for the first clash
+  if(canScreen(card)) card.screen = true;       // horse screens it instead
   if(atFront) G.you.lanes[lane].unshift(card); else G.you.lanes[lane].push(card);
   G.deployed++;
 
@@ -1431,7 +1452,8 @@ async function revealDeployment(){
     const i = G.them.hand.indexOf(d.card);
     if(i >= 0) G.them.hand.splice(i, 1);
     d.card.down = true;
-    d.card.dugIn = true;
+    if(canDigIn(d.card))  d.card.dugIn  = true;
+    if(canScreen(d.card)) d.card.screen = true;
     if(d.back) G.them.lanes[d.L].push(d.card); else G.them.lanes[d.L].unshift(d.card);
   }
   say(`Both lines are set.`);
@@ -1571,8 +1593,9 @@ async function commitReserve(lane, atFront){
     render();
   }
 
-  // the line has taken a hit — it is no longer braced
-  if(G.wave === 2) [...G.you.lanes.flat(), ...G.them.lanes.flat()].forEach(c=>delete c.dugIn);
+  // the line has taken a hit — it is no longer braced, and the horse is committed
+  if(G.wave === 2) [...G.you.lanes.flat(), ...G.them.lanes.flat()]
+    .forEach(c=>{ delete c.dugIn; delete c.screen; });
 
   G.wave++;
   render();
