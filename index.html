@@ -299,7 +299,18 @@
   .rungstrip i.now{color:var(--m)}
   /* ---- combat effects: who hit whom ---- */
   #fxLayer{position:fixed;inset:0;z-index:40;pointer-events:none}
-  #fxSvg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  #fxSvg,#aimSvg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  /* ---- standing orders, drawn before the blows ---- */
+  .aimline{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;
+           stroke:#6d798c;opacity:.5;stroke-dasharray:5 4}
+  .aimline.flank{stroke:#8a7a4e}
+  .aimline.on{opacity:1;stroke-width:2.6;stroke-dasharray:none;stroke:var(--s)}
+  /* a unit waiting on orders, and the one you are pointing right now */
+  .c.aimable{cursor:pointer;box-shadow:0 0 0 1px var(--line)}
+  .c.aimable:hover{box-shadow:0 0 0 2px var(--dim)}
+  .c.aimsel{box-shadow:0 0 0 2px var(--s), 0 0 16px rgba(255,107,74,.45)!important}
+  .lane.tgt{outline:1px dashed rgba(255,107,74,.55);outline-offset:-2px;cursor:crosshair}
+  .lane.tgt .stack.them{background:rgba(255,107,74,.07);border-radius:8px}
   .strike{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:2.6}
   .strike.head{stroke:#ff6b4a}
   .strike.flank{stroke:#ffc44a}
@@ -465,7 +476,10 @@
 <div class="overlay hide" id="branchPick"><div class="pickbox" id="branchBox"></div></div>
 <div class="overlay hide" id="runEnd"><div class="pickbox" id="runEndBox"></div></div>
 
-<div id="fxLayer"><svg id="fxSvg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg></div>
+<div id="fxLayer">
+  <svg id="aimSvg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+  <svg id="fxSvg"  xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+</div>
 
 <div class="overlay hide" id="logOv"><div class="logbox"><div class="log">
   <h1>HOW THIS WAS BUILT</h1>
@@ -526,17 +540,51 @@ DWARVES   spread out and hold every lane</div>
   <h2>HOW IT WORKS</h2>
   <div class="rules">
     <h3>A FIGHT</h3>
-    Three lanes, three waves. Each wave you place one card face down in a lane; your
-    opponent does the same at the same time. Then both reveal and resolve at once.
+    Five lanes, two clashes.
+    <ul>
+      <li><b>Deploy</b> — lay out four units, at most two to a lane. Both lines
+        reveal together and <b>no blows are struck</b>.</li>
+      <li><b>Clash</b> — commit one reserve, then give every unit its orders and
+        send them in. Twice.</li>
+    </ul>
+    Your opponent commits at the same moment you do. Neither of you can see the
+    other's card until both are down.
 
     <h3>EVERY CARD</h3>
     <ul>
-      <li><b style="color:var(--s)">▲ Strike</b> — added up across your side of a lane</li>
+      <li><b style="color:var(--s)">▲ Strike</b> — what it deals to the lane you aim it at</li>
       <li><b style="color:var(--g)">⬢ Guard</b> — only the <b>frontmost</b> card defends</li>
       <li><b style="color:var(--m)">✦ Morale</b> — what it scores if it survives</li>
     </ul>
-    New cards go to the <b>front</b>, so the card you just played is the one defending —
-    and the first to die.
+
+    <h3>THE THREE ARMS</h3>
+    <ul>
+      <li><b>Infantry</b> — holds. Only strikes from the front rank.</li>
+      <li><b>Cavalry</b> — strikes from the front rank, and hits for
+        <b>+3</b> going through a gap. Never digs in.</li>
+      <li><b>Archers</b> — shoot from <b>any</b> rank. From the second rank they
+        can shoot their own lane <b>or either neighbour</b>.</li>
+    </ul>
+    A unit behind another unit is depth, not a queue — which is why archers want
+    cover and infantry want the front.
+
+    <h3>ORDERS</h3>
+    Nothing resolves until you say so. Tap a unit, then tap the lane it strikes.
+    <ul>
+      <li>A front-rank unit facing someone fights <b>that lane</b>.</li>
+      <li>A front-rank unit facing <b>nothing</b> must wheel into a neighbour.</li>
+      <li>A second-rank archer picks from up to three lanes.</li>
+    </ul>
+    Units with only one legal target are pointed there for you.
+
+    <h3>THE OPENING LINE</h3>
+    Units placed during deployment are ready for the first clash, and each arm is
+    ready in its own way:
+    <ul>
+      <li><b>Foot</b> is <b>dug in</b> — <b>+2 Guard</b> for the first clash only.</li>
+      <li><b>Horse</b> is <b>screening</b> — it cannot be broken in the first
+        clash at all. It absorbs the blow, lets the overflow through, and rides clear.</li>
+    </ul>
 
     <h3>BREAKING A CARD</h3>
     <ul>
@@ -550,7 +598,7 @@ DWARVES   spread out and hold every lane</div>
     <ul>
       <li>your <b>leader morale</b></li>
       <li>+ <b>✦ Morale</b> of your cards still standing</li>
-      <li>+ <b>lane bounties</b> (2/3/2) to whoever holds the most morale in that lane</li>
+      <li>+ <b>lane bounties</b> (2/3/4/3/2) to whoever holds the most morale in that lane</li>
     </ul>
     Routing a card denies its morale just as well as killing it.
 
@@ -615,8 +663,10 @@ const FACTIONS = {
     {n:'SPEARMEN',  t:'inf', s:3, g:6, m:5},
     {n:'THE BANNER',t:'inf', s:1, g:7, m:7},
   ]},
-  // 9 -> 7: screening cavalry is worth real morale, and half their deck has it
-  GOBLINS:{ name:'GOBLINS', base:7, col:'#8fc46a', tag:'G',
+  // Went to 7 to pay for screening cavalry, then straight back to 9: giving
+  // second-rank archers reach hands the stacking factions more than it hands a
+  // faction with one archer, and the two changes cancel almost exactly.
+  GOBLINS:{ name:'GOBLINS', base:9, col:'#8fc46a', tag:'G',
     blurb:'Half of them mounted. They go round your line, not through it.', deck:[
     {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:2},
     {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:3},
@@ -782,8 +832,13 @@ function mkSide(src){
 let G, sel = null, busy = false, fightNo = 1;
 let resolvingLane = -1;      // lane currently being walked through, or -1
 let pendingLane   = -1;      // lane waiting on a front/behind answer, or -1
-let flankAsk      = null;    // {lane, resolve} while aiming an unopposed lane
-let flankChoice   = {};      // the player's aim for this clash
+// ── aiming ──
+// The clash no longer resolves the moment both reserves are revealed. Between
+// the reveal and the blows there is a phase where you point each of your units
+// at what it is going to hit, and nothing happens until you say so.
+let aiming     = null;    // {resolve} while the player is aiming, else null
+let playerAim  = {};      // {cardId: targetLane} — the player's orders
+let aimSel     = null;    // card id currently being aimed, or null
 
 let playerFaction = 'HUMANS';
 let run = null;
@@ -835,7 +890,7 @@ function beginFight(enc){
   G.phase = 'deploy';
   G.deployed = 0;
   pendingLane = -1;
-  flankAsk = null; flankChoice = {};
+  aiming = null; playerAim = {}; aimSel = null;
   G.enemyDeploy = pickDeployment(G.them, G.you).map(c=>({card:c.card, L:c.L, back:c.back}));
 
   $('#endSlot').innerHTML = '';
@@ -879,65 +934,91 @@ const fights = (c, ix) => ix === 0 || c.t === 'arc';
 function laneStrike(side, i){
   return living(side.lanes[i]).reduce((t,c,ix)=> t + (fights(c,ix) ? c.s : 0), 0);
 }
-// the same units wheeling sideways — cavalry earn their bonus only out here
-function laneFlankStrike(side, i){
-  return living(side.lanes[i]).reduce((t,c,ix)=>
-    t + (fights(c,ix) ? c.s + (c.t==='cav' ? CAV_FLANK : 0) : 0), 0);
-}
-
 const isUnopposed  = (att, def, L) => living(att.lanes[L]).length && !living(def.lanes[L]).length;
-const unopposedOf  = (att, def)    => LANE_IX.filter(L => isUnopposed(att, def, L));
 // you may only wheel into a neighbour that actually has someone in it
 const flankTargets = (def, L)      => adjacent(L).filter(t => living(def.lanes[t]).length > 0);
 
-// Total Strike arriving in each lane, given a map of {unopposedLane: targetLane}.
-// Opposed lanes fight straight ahead; unopposed ones send their weight sideways.
-// Returns, per lane, the incoming total AND an itemised list of where every
-// point came from. The breakdown is the whole point: with rank rules, wheeling
-// and dug-in guards, a bare total tells the player nothing about why.
-function buildAssault(att, def, assign){
-  const inc = LANE_IX.map(()=>({ total:0, parts:[] }));
-  for(const L of LANE_IX){
-    const units = living(att.lanes[L]);
-    if(!units.length) continue;
-    const opposed = living(def.lanes[L]).length > 0;
-    const target  = opposed ? L : assign[L];
-    if(target === undefined || target === null) continue;
-    units.forEach((c, ix)=>{
-      if(!fights(c, ix)) return;
-      const bonus = (!opposed && c.t === 'cav') ? CAV_FLANK : 0;
-      inc[target].total += c.s + bonus;
-      inc[target].parts.push({ c, name:c.n, type:c.t, base:c.s, bonus, from:L, wheeled:!opposed, rank:ix });
+// Where may this unit send its Strike? Targeting is per UNIT, not per lane, so
+// a lane's weight can be split across three lanes if what is standing in it can
+// reach that far.
+//
+//   front rank, opposed    fights what is in front of it, and nothing else
+//   front rank, unopposed  must wheel ±1 into a neighbour that has someone in it
+//   archer, second rank    shoots its own lane OR either neighbour — the reason
+//                          to put an archer behind cover is now reach, not just
+//                          survival, and the second rank stops being a queue
+//   anything else behind   waits
+// A lane with nobody living in it is never a legal target: there is nothing to
+// shoot at, and an empty lane is taken on morale, not on damage.
+function legalTargets(att, def, c, L, ix){
+  if(!fights(c, ix)) return [];
+  const hasFoe = t => living(def.lanes[t]).length > 0;
+  if(c.t === 'arc' && ix > 0) return [L, ...adjacent(L)].filter(hasFoe);
+  return hasFoe(L) ? [L] : adjacent(L).filter(hasFoe);
+}
+
+// Cavalry are built to go through a gap, so they hit harder doing it — but only
+// when the gap is real: their own lane faces nothing and they are wheeling.
+// An archer arcing over a neighbour gets no bonus; it is the same volley.
+const aimBonus = (att, def, c, L, t) =>
+  (c.t === 'cav' && t !== L && !living(def.lanes[L]).length) ? CAV_FLANK : 0;
+
+// Every unit that can strike and has somewhere to send it.
+function strikersOf(att, def){
+  const out = [];
+  for(const L of LANE_IX)
+    living(att.lanes[L]).forEach((c, ix)=>{
+      const opts = legalTargets(att, def, c, L, ix);
+      if(opts.length) out.push({ c, L, ix, opts });
     });
+  return out;
+}
+
+// Total Strike arriving in each lane, given a map of {cardId: targetLane}.
+// Returns, per lane, the incoming total AND an itemised list of where every
+// point came from. The breakdown is the whole point: with rank rules, wheeling,
+// arcing fire and dug-in guards, a bare total tells the player nothing about why.
+function buildAssault(att, def, aim){
+  const inc = LANE_IX.map(()=>({ total:0, parts:[] }));
+  for(const { c, L, ix } of strikersOf(att, def)){
+    const t = aim[c.id];
+    if(t === undefined || t === null) continue;
+    const bonus = aimBonus(att, def, c, L, t);
+    inc[t].total += c.s + bonus;
+    inc[t].parts.push({ c, name:c.n, type:c.t, base:c.s, bonus, from:L, to:t,
+                        wheeled: t !== L, arced: c.t === 'arc' && t !== L, rank:ix });
   }
   return inc;
 }
 const assaultTotals = a => a.map(x=>x.total);
 
-// where an unopposed lane does the most damage; used by the AI, and for the
-// player wherever only one target is legal
-function autoAssign(att, def){
-  const assign = {};
-  for(const L of unopposedOf(att, def)){
-    const opts = flankTargets(def, L);
-    if(!opts.length) continue;
-    if(opts.length === 1){ assign[L] = opts[0]; continue; }
-    const power = laneFlankStrike(att, L);
+// Where each unit does the most damage. Drives the enemy, fills in the player's
+// units that have only one legal target, and projects the threat readouts.
+// Assigned in sequence with a running tally of what is already aimed at each
+// lane, so weight CONCENTRATES: the second archer sees that the first one has
+// already softened a lane and piles on rather than spreading itself thin.
+function autoAim(att, def){
+  const aim = {}, pending = LANE_IX.map(()=>0);
+  for(const { c, L, opts } of strikersOf(att, def)){
+    if(opts.length === 1){ aim[c.id] = opts[0]; pending[opts[0]] += c.s; continue; }
     let best = opts[0], bestV = -Infinity;
     for(const t of opts){
+      const power = pending[t] + c.s + aimBonus(att, def, c, L, t);
       const front = frontOf(def, t);
       let v = LANE_BOUNTY[t] * 0.8;
       if(front){
         const g = effGuard(front);
-        if(power >= g*2)      v += 9 + front.m*1.5;
+        if(front.screen)      v -= 3;                    // it will ride clear anyway
+        else if(power >= g*2) v += 9 + front.m*1.5;
         else if(power >= g)   v += 5 + front.m;
         else                  v += power * 0.2;
       }
       if(v > bestV){ bestV = v; best = t; }
     }
-    assign[L] = best;
+    aim[c.id] = best;
+    pending[best] += c.s + aimBonus(att, def, c, L, best);
   }
-  return assign;
+  return aim;
 }
 
 // What a lane is actually facing, given everything that will wheel into it.
@@ -964,9 +1045,16 @@ function render(){
   $('#deckInfo').textContent = `deck ${G.you.deck.length}`;
 
   // projected assaults as the board currently stands — face-down reserves are
-  // excluded by living(), so this never leaks a hidden card
-  const projMine   = buildAssault(G.you,  G.them, autoAssign(G.you,  G.them));
-  const projTheirs = buildAssault(G.them, G.you,  autoAssign(G.them, G.you));
+  // excluded by living(), so this never leaks a hidden card. While you are
+  // aiming, YOUR projection follows your actual orders, so the readouts move as
+  // you point units around; that is the whole reason to aim by hand.
+  const projMine   = buildAssault(G.you,  G.them, aiming ? playerAim : autoAim(G.you, G.them));
+  const projTheirs = buildAssault(G.them, G.you,  autoAim(G.them, G.you));
+
+  // which of your units still need orders, and what the selected one may hit
+  const strikers  = aiming ? strikersOf(G.you, G.them) : [];
+  const selStriker = aiming && aimSel !== null ? strikers.find(s=>s.c.id === aimSel) : null;
+  const openTgts   = selStriker ? selStriker.opts : [];
 
   $('#board').innerHTML = LANE_BOUNTY.map((b,i)=>{
     const eFrontId = (frontOf(G.them,i)||{}).id, pFrontId = (frontOf(G.you,i)||{}).id;
@@ -991,13 +1079,11 @@ function render(){
     const full    = present(G.you.lanes[i]).length >= LANE_CAP;
     const canPick = sel!==null && !busy && !G.over && !full;
     const choosing = pendingLane === i;
-    return `<div class="lane ${canPick?'pick':''} ${full?'deployed':''} ${resolvingLane===i?'resolving':''}" data-lane="${i}">
+    const isTgt    = openTgts.includes(i);
+    return `<div class="lane ${canPick?'pick':''} ${full?'deployed':''} ${resolvingLane===i?'resolving':''} ${isTgt?'tgt':''}" data-lane="${i}">
       ${choosing ? `<div class="poschoice">
         <button class="posbtn" data-pos="1">FRONT</button>
         <button class="posbtn" data-pos="0">BEHIND</button></div>` : ''}
-      ${flankAsk && flankAsk.lane===i ? `<div class="poschoice">
-        ${flankTargets(G.them,i).map(t=>`<button class="posbtn flankbtn" data-tgt="${t}">${t<i?'⟵ LANE '+(t+1):'LANE '+(t+1)+' ⟶'}</button>`).join('')}
-      </div>` : ''}
       <div class="ltot">${threatLabel(projMine[i].total, eFront)}${eWheel?' <span class="wheel">⇢</span>':''}</div>
       <div class="stack them">${eStack}</div>
       <div class="bounty">BOUNTY <b>${b}</b>${held}</div>
@@ -1007,19 +1093,31 @@ function render(){
   }).join('');
 
   document.querySelectorAll('.lane').forEach(el=>{
-    el.onclick = ()=>{ if(sel!==null && !busy && !G.over) place(+el.dataset.lane); };
+    el.onclick = ()=>{
+      const L = +el.dataset.lane;
+      if(aiming) return aimAt(L);
+      if(sel!==null && !busy && !G.over) place(L);
+    };
   });
   document.querySelectorAll('.posbtn[data-pos]').forEach(b=>{
     b.onclick = ev=>{ ev.stopPropagation(); placeAt(pendingLane, b.dataset.pos === '1'); };
   });
-  document.querySelectorAll('.flankbtn').forEach(b=>{
-    b.onclick = ev=>{
-      ev.stopPropagation();
-      const L = flankAsk.lane, r = flankAsk.resolve;
-      flankChoice[L] = +b.dataset.tgt;
-      flankAsk = null; r();
-    };
-  });
+
+  // ── aiming: your own units become the clickable thing ──
+  if(aiming){
+    for(const s of strikers){
+      const el = cardEl(s.c);
+      if(!el) continue;
+      el.classList.add('aimable');
+      if(s.c.id === aimSel) el.classList.add('aimsel');
+      if(s.opts.length === 1) el.classList.add('aimlocked');
+      el.onclick = ev=>{
+        ev.stopPropagation();
+        aimSel = (aimSel === s.c.id) ? null : s.c.id;
+        render();
+      };
+    }
+  }
 
   $('#hand').innerHTML = G.you.hand.map((c,i)=>`
     <div class="hc ${sel===i?'sel':''}" data-i="${i}">
@@ -1030,11 +1128,13 @@ function render(){
     </div>`).join('');
   document.querySelectorAll('.hc').forEach(el=>{
     el.onclick = ()=>{
-      if(busy||G.over) return;
+      if(busy||G.over||aiming) return;     // the hand is closed while aiming
       sel = (sel===+el.dataset.i)?null:+el.dataset.i;
       render();
     };
   });
+
+  drawAims();
 }
 function say(t){ $('#msg').innerHTML = t; }
 
@@ -1076,6 +1176,82 @@ function drawStrike(x1,y1,x2,y2,isFlank){
                    setTimeout(()=>g.remove(), 300); }, 560);
 }
 
+// ── standing orders: the arrows you can see BEFORE the blows land ───────────
+// Drawn fresh every render into their own layer, so the transient strike arcs
+// in #fxSvg can come and go without wiping them.
+function drawAims(){
+  const svg = $('#aimSvg');
+  if(!svg) return;
+  svg.innerHTML = '';
+  if(!aiming) return;
+  for(const { c, L } of strikersOf(G.you, G.them)){
+    const t = playerAim[c.id];
+    if(t === undefined || t === null) continue;
+    const aEl = cardEl(c), dEl = frontOf(G.them, t) && cardEl(frontOf(G.them, t));
+    if(!aEl || !dEl) continue;
+    const [x1,y1] = centerOf(aEl), [x2,y2] = centerOf(dEl);
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d', strikeArc(x1,y1,x2,y2, t !== L ? 46 : 8));
+    p.setAttribute('class', 'aimline ' + (t !== L ? 'flank' : 'head') + (c.id === aimSel ? ' on' : ''));
+    svg.appendChild(p);
+    const ux=(x2-x1)/(Math.hypot(x2-x1,y2-y1)||1), uy=(y2-y1)/(Math.hypot(x2-x1,y2-y1)||1);
+    const h = document.createElementNS('http://www.w3.org/2000/svg','path');
+    h.setAttribute('d', `M${x2-ux*10+uy*5.5},${y2-uy*10-ux*5.5} L${x2},${y2} L${x2-ux*10-uy*5.5},${y2-uy*10+ux*5.5}`);
+    h.setAttribute('class', p.getAttribute('class'));
+    svg.appendChild(h);
+  }
+}
+addEventListener('resize', ()=>{ if(aiming) drawAims(); });
+
+// Clicking a lane while a unit is selected points that unit at it.
+function aimAt(L){
+  if(!aiming || aimSel === null) return;
+  const s = strikersOf(G.you, G.them).find(x=>x.c.id === aimSel);
+  if(!s || !s.opts.includes(L)) return;
+  playerAim[aimSel] = L;
+  // step to the next unit that still has a real choice, so a full line can be
+  // aimed without going back to the board between every order
+  const rest = strikersOf(G.you, G.them)
+    .filter(x=>x.opts.length > 1 && x.c.id !== aimSel && playerAim[x.c.id] === undefined);
+  aimSel = rest.length ? rest[0].c.id : null;
+  sayAim();
+  render();
+}
+
+// Every unit with exactly one legal target is pointed there for you — there is
+// no decision in it. Everything else waits on an order.
+function seedAim(){
+  playerAim = {};
+  for(const { c, opts } of strikersOf(G.you, G.them))
+    if(opts.length === 1) playerAim[c.id] = opts[0];
+}
+const unaimed = () => strikersOf(G.you, G.them).filter(s=>playerAim[s.c.id] === undefined);
+
+function sayAim(){
+  const left = unaimed().length;
+  const body = !strikersOf(G.you, G.them).length
+    ? `Nothing of yours can reach them.`
+    : left
+      ? `Tap a unit, then tap the lane it strikes. <b>${left}</b> still ${left===1?'has':'have'} no orders.`
+      : `Every unit has its orders. Change any of them, or send them in.`;
+  say(`<div class="clashhead">GIVE THE ORDER</div>${body}${clashBtn()}`);
+  wireClash();
+}
+const clashBtn = () =>
+  unaimed().length ? '' : `<div class="nextup"><button class="btn p" id="goClash">CLASH →</button></div>`;
+function wireClash(){
+  const b = $('#goClash');
+  if(b) b.onclick = ()=>{ const r = aiming && aiming.resolve; aiming = null; aimSel = null; render(); if(r) r(); };
+}
+
+// Hand the board to the player and wait. Nothing resolves until CLASH is hit.
+function askOrders(){
+  seedAim();
+  const first = unaimed()[0];
+  aimSel = first ? first.c.id : null;
+  return new Promise(res=>{ aiming = { resolve:res }; sayAim(); render(); });
+}
+
 // one side's blows into one lane, then the damage cascading front to back
 async function playAssault(parts, defenders, trace){
   if(!parts.length || !defenders.length) return;
@@ -1115,7 +1291,8 @@ async function playClash(p){
 function assaultHTML(who, total, parts, trace){
   if(!parts.length && !trace.length) return '';
   const rows = parts.map(p=>{
-    const why = p.wheeled ? `wheels in from lane ${p.from+1}`
+    const why = p.arced   ? `arcs over from lane ${p.from+1}`
+              : p.wheeled ? `wheels in from lane ${p.from+1}`
               : p.rank > 0 ? `${TYPE[p.type].name}, second rank` : TYPE[p.type].name;
     const bon = p.bonus ? ` <span class="bon">+${p.bonus}</span>` : '';
     return `<div class="ln"><span class="nmx">${p.name}</span><span class="why">${why}</span><span class="num">▲${p.base}${bon}</span></div>`;
@@ -1349,22 +1526,6 @@ function placeAt(lane, atFront){
   return G.phase === 'deploy' ? deployCard(lane, atFront) : commitReserve(lane, atFront);
 }
 
-// Walk the player through aiming each unopposed lane that has more than one
-// legal neighbour. Lanes with a single option are settled by autoAssign.
-async function askFlanks(){
-  flankChoice = {};
-  const needAim = unopposedOf(G.you, G.them).filter(L => flankTargets(G.them, L).length > 1);
-  for(const L of needAim){
-    await new Promise(res=>{
-      flankAsk = { lane:L, resolve:res };
-      say(`<b>Lane ${L+1}</b> faces nothing. Wheel it into which neighbour?`);
-      render();
-    });
-  }
-  flankAsk = null;
-  render();
-}
-
 async function commitReserve(lane, atFront){
   busy = true;
   const myCard = G.you.hand.splice(sel,1)[0];
@@ -1394,16 +1555,18 @@ async function commitReserve(lane, atFront){
   await wait(420);
   delete myCard.reveal; delete foeCard.reveal;
 
+  // ── 3. orders ──
+  // The board is yours until you say go. Point each unit at what it is hitting;
+  // the enemy has already chosen theirs and cannot react to yours.
+  const theirAim = autoAim(G.them, G.you);
+  busy = false;                                // the board must accept clicks
+  await askOrders();
+  busy = true;
+
   // Outcomes are computed for ALL lanes now, before anything is shown — combat
   // is simultaneous. Only the presentation below is sequential, so the player
   // can follow one lane at a time and reconstruct why it went the way it did.
-  // any of your lanes facing nothing must wheel into a neighbour; ask where it
-  // has a real choice, otherwise the single legal target is taken for you
-  await askFlanks();
-
-  const yourAim  = { ...autoAssign(G.you, G.them), ...flankChoice };
-  const theirAim = autoAssign(G.them, G.you);
-  const incThem  = buildAssault(G.you,  G.them, yourAim);
+  const incThem  = buildAssault(G.you,  G.them, playerAim);
   const incYou   = buildAssault(G.them, G.you,  theirAim);
 
   const plan = [];
@@ -1452,6 +1615,8 @@ async function commitReserve(lane, atFront){
     resolvingLane = -1;
     render();
   }
+
+  playerAim = {};                            // orders expire with the clash
 
   // the line has taken a hit — it is no longer braced, and the horse is committed
   if(G.wave === 2) [...G.you.lanes.flat(), ...G.them.lanes.flat()]
