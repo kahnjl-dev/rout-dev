@@ -276,28 +276,40 @@ The model is in and correct — all four damage cases verified — but the numbe
 are not tuned. Two findings, one of which is a rule problem rather than a
 number problem.
 
-### The wall never holds
+### The wall holds — an earlier "it never holds" reading was a bad measurement
+
+First pass reported the gate as completely inert, 0 holds in 13,500 fights, and
+proposed redesigning it. That was wrong. The harness counted outcomes from
+`computeDamage`'s **return value**, which by construction only contains cards
+that took damage — a hold is written to the trace and returns nothing. It was
+reading an array that can never contain the thing it was looking for.
+
+Counted from the trace instead:
 
 ```
-held (Strike < Guard):  0.00 per fight, across 13,500 fights
+line holds (Strike < Guard):  47.6% of all engagements · 12.2 per fight
+
+incoming Strike   min 1 · p25 3 · median 6 · p75 10 · max 36
+effective Guard   min 3 · p25 4 · median 5 · p75  7 · max  9
 ```
 
-**The gate is inert.** Guard is supposed to be a wall you either clear or
-achieve nothing against, and it has never once stopped an attack. Lane Strike
-aggregates across every unit that can reach — typically 8–15 — against Guards of
-3–7. It always punches through, so "can I get through at all?" is not currently
-a question anyone has to ask, and §1's entire justification is unearned.
+Median Strike 6 against median Guard 5, with the top quartile punching well
+through. That is the gate working exactly as intended: a single unit usually
+cannot crack a braced line, and concentrating several into one lane can.
 
-Three ways out, in increasing order of how much they change:
+Also verified directly, since it was the suspected cause: **second-rank infantry
+and cavalry contribute nothing** — `fights=false`, no legal targets. Only
+archers reach from the second rank. Strike aggregates across *lanes* (wheeling
+and archer arcs), not up the ranks.
 
-- **Numbers.** Push Guard up into the range of aggregated lane Strike. Cheapest,
-  and it's the retune we already owe.
-- **Gate per attacker.** Each striker is compared to Guard individually and only
-  those that clear contribute their excess. A shieldwall then genuinely shrugs
-  off a swarm of weak attackers, and one heavy hitter becomes worth more than
-  three light ones. Bigger change, and arguably the more interesting game.
-- **Leave it.** Accept that Guard is a damage discount and drop the pretence —
-  but then the concentrate-vs-spread decision goes with it.
+| where lane Strike comes from | share |
+|---|---|
+| front rank, straight ahead | 53% |
+| second-rank archers, own lane | 17% |
+| wheeling into a neighbour | 15% |
+| archers arcing into a neighbour | 15% |
+
+Attackers per engagement: 1 (52%), 2 (31%), 3 (13%), 4+ (4%).
 
 ### Destruction was the default until the overkill rule was restored
 
@@ -310,12 +322,18 @@ survivable, still hot.
 ### Where the matchups sit
 
 ```
-spread          38–61%  (23pt)      — Dwarves are losing badly
+spread          37–61%  (24pt)
 clashes/fight   4.00                — always runs the full length
-swept early     0%
-per fight       62 damage · 5.5 wounded · 3.5 broken · 3.1 destroyed
+swept early     0%                  — the collapse condition never fires
+per fight       12.2 held · 5.5 wounded · 3.5 broken · 3.1 destroyed · 1.2 screened
 ```
 
-62 damage a fight against 38 total deck morale is the headline: everything is
-far too lethal, which is the same finding as "the wall never holds" seen from
-the other side.
+**Dwarves are the problem, and it is a deck problem, not a rules problem.** They
+lose as the attacker in every matchup (DvH 37, DvG 38) and win as the defender
+(HvD 61, GvD 61). Their Guard band is the highest in the game and their Strike
+band is the lowest — under continuous damage those do not cancel, because Guard
+now only reduces what you take while Strike decides whether you can do anything
+at all. A faction that cannot get through a line cannot take ground, and ground
+is the only thing that scores.
+
+That is the retune, and it is the remaining work in step 1.
