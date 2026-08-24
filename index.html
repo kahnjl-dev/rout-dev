@@ -71,6 +71,8 @@
   .c .st{display:flex;justify-content:space-between;gap:2px;font-size:12.5px;font-variant-numeric:tabular-nums}
   .c .st span{display:flex;align-items:center;gap:1px}
   .c .sv{color:var(--s)} .c .gv{color:var(--g)} .c .mv{color:var(--m)}
+  .c .mv.hurt{color:#e0a04a}
+  .c .ofm{opacity:.5;font-size:10px;margin-left:0}
   .c .dug{color:var(--m);font-size:9px;vertical-align:1px;margin-left:1px}
   .c .ty{
     display:inline-block;font-size:7.5px;letter-spacing:.06em;padding:1px 3px;
@@ -624,9 +626,15 @@ const emptyLanes = () => Array.from({length:LANES}, ()=>[]);
 // are built for exactly that, so they hit harder doing it.
 const CAV_FLANK = 3;
 const adjacent  = L => [L-1, L+1].filter(x => x >= 0 && x < LANES);
-const WAVES = 3;
-const HAND_SIZE = 7;      // deploy 4 + two reserves, with a little choice left over
+// A longer engagement. Wave 1 is deployment; every wave after it is a clash,
+// and you commit a card blind at the start of each one — the blind commitment
+// has to happen EVERY round or the hook dilutes across the extra length instead
+// of repeating. Starting at 4 clashes rather than 8: a four-fight ladder at
+// eight rounds is a ~25-minute run, which is a different product.
+let CLASHES = 4;
+const WAVES = 1 + CLASHES;
 const DEPLOY_N  = 4;      // opening line, at most two to any one lane
+const HAND_SIZE = DEPLOY_N + CLASHES;   // the line, plus one reserve per clash
 // A prepared line is braced for the first clash. Re-checked after the rank
 // rules landed, on the theory it might no longer be earning its place: it is.
 // At +0 the first clash still takes 67% of all destruction and the nine
@@ -646,46 +654,58 @@ const DEPLOY_N  = 4;      // opening line, at most two to any one lane
 // restores the spread to 12 points, and it is the same idea stated honestly for
 // each arm — foot holds ground by digging into it, horse by not being there.
 let DUG_IN      = 2;   // let, so it can be swept live
+let OVERKILL    = 2;   // damage this many times the morale left destroys outright
 const canDigIn  = c => c.t !== 'cav';
 const canScreen = c => c.t === 'cav';
 const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
 const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
 
-// Every faction is playable by either side. Base morale is the ONLY faction axis —
-// all decks total 30 card morale so the two never compound. See assertDecks().
+// ✦ is no longer a score — it is the pool the unit can absorb before it breaks.
+// That changes what the numbers mean, so all of these are placeholders pending
+// the retune; what is preserved for now is the SHAPE (each faction eight unique
+// cards, the same guard band, the same arm mix) so the retune has a fair
+// starting point rather than three differently-broken decks.
+//
+// Every faction is playable by either side. Base morale is gone — scoring no
+// longer runs through it. Faction identity is arm mix and stat shape only,
+// until leaders arrive with initiative and leadership.
 const FACTIONS = {
-  HUMANS:{ name:'HUMANS', base:10, col:'#7f9fd0', tag:'H',
+  HUMANS:{ name:'HUMANS', base:0, col:'#7f9fd0', tag:'H',
     blurb:'Every arm, and an edge in none. They come straight at you.', deck:[
-    {n:'KNIGHTS',   t:'cav', s:7, g:3, m:2},
-    {n:'SWORDSMEN', t:'inf', s:5, g:4, m:3},
-    {n:'LONGBOWS',  t:'arc', s:5, g:3, m:3},
-    {n:'CROSSBOWS', t:'arc', s:3, g:4, m:4},
-    {n:'SPEARMEN',  t:'inf', s:3, g:6, m:5},
-    {n:'THE BANNER',t:'inf', s:1, g:7, m:7},
+    {n:'KNIGHTS',    t:'cav', s:7, g:3, m:4},
+    {n:'OUTRIDERS',  t:'cav', s:6, g:3, m:3},
+    {n:'SWORDSMEN',  t:'inf', s:5, g:4, m:5},
+    {n:'LONGBOWS',   t:'arc', s:5, g:3, m:3},
+    {n:'CROSSBOWS',  t:'arc', s:3, g:4, m:4},
+    {n:'HALBERDIERS',t:'inf', s:4, g:5, m:5},
+    {n:'SPEARMEN',   t:'inf', s:3, g:6, m:6},
+    {n:'THE BANNER', t:'inf', s:1, g:7, m:8},
   ]},
-  // Went to 7 to pay for screening cavalry, then straight back to 9: giving
-  // second-rank archers reach hands the stacking factions more than it hands a
-  // faction with one archer, and the two changes cancel almost exactly.
-  GOBLINS:{ name:'GOBLINS', base:9, col:'#8fc46a', tag:'G',
+  GOBLINS:{ name:'GOBLINS', base:0, col:'#8fc46a', tag:'G',
     blurb:'Half of them mounted. They go round your line, not through it.', deck:[
-    {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:2},
-    {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:3},
-    {n:'LANCERS',      t:'cav', s:5, g:4, m:3},
+    {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:3},
+    {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:4},
+    {n:'LANCERS',      t:'cav', s:5, g:4, m:4},
+    {n:'RAIDERS',      t:'cav', s:4, g:4, m:5},
     {n:'SHORTBOWS',    t:'arc', s:4, g:3, m:4},
-    {n:'SPEAR MOB',    t:'inf', s:2, g:6, m:5},
-    {n:'THE IDOL',     t:'inf', s:1, g:7, m:7},
+    {n:'FANATICS',     t:'inf', s:6, g:3, m:4},
+    {n:'SPEAR MOB',    t:'inf', s:2, g:6, m:6},
+    {n:'THE IDOL',     t:'inf', s:1, g:7, m:8},
   ]},
-  DWARVES:{ name:'DWARVES', base:12, col:'#d9a05b', tag:'D',
+  DWARVES:{ name:'DWARVES', base:0, col:'#d9a05b', tag:'D',
     blurb:'No horse in the hold. They stack deep and refuse to move.', deck:[
-    {n:'HAMMERERS',   t:'inf', s:5, g:5, m:2},
+    {n:'HAMMERERS',   t:'inf', s:5, g:5, m:4},
     {n:'CROSSBOWS',   t:'arc', s:5, g:4, m:4},
-    {n:'IRONBREAKERS',t:'inf', s:3, g:6, m:3},
+    {n:'MINERS',      t:'inf', s:4, g:4, m:3},
+    {n:'IRONBREAKERS',t:'inf', s:3, g:6, m:4},
     {n:'THUNDERERS',  t:'arc', s:3, g:4, m:5},
-    {n:'SHIELD WALL', t:'inf', s:2, g:7, m:3},
-    {n:'THE ANVIL',   t:'inf', s:1, g:7, m:7},
+    {n:'LONGBEARDS',  t:'inf', s:4, g:5, m:4},
+    {n:'SHIELD WALL', t:'inf', s:2, g:7, m:6},
+    {n:'THE ANVIL',   t:'inf', s:1, g:7, m:8},
   ]},
 };
-// each deck is two copies of every card
+// Each deck is two copies of every card. Eight cards a fight out of twelve was
+// already thin at three waves; at five it is untenable, so the decks grow.
 const COPIES = 2;
 const TYPE = {
   inf:{ label:'INF', glyph:'▮', name:'Infantry' },
@@ -701,10 +721,14 @@ function assertDecks(){
   for(const k of FACTION_KEYS){
     const f = FACTIONS[k];
     const total = f.deck.reduce((a,c)=>a+c.m,0);
-    if(total !== 24) bad.push(`${k} card morale ${total}, expected 24`);
-    if(f.deck.length !== 6) bad.push(`${k} has ${f.deck.length} unique cards, expected 6`);
+    if(total !== 38) bad.push(`${k} card morale ${total}, expected 38`);
+    if(f.deck.length !== 8) bad.push(`${k} has ${f.deck.length} unique cards, expected 8`);
+    // HAND_SIZE, not MIN_DECK — this runs before MIN_DECK is initialised
+    if(f.deck.length * COPIES < HAND_SIZE)
+      bad.push(`${k} deck of ${f.deck.length*COPIES} cannot field a hand of ${HAND_SIZE}`);
     for(const c of f.deck){
       if(c.g < 3 || c.g > 7) bad.push(`${k}/${c.n} guard ${c.g} outside 3-7`);
+      if(c.m < 2)            bad.push(`${k}/${c.n} morale ${c.m} — nothing survives a hit`);
       if(!TYPE[c.t])         bad.push(`${k}/${c.n} has no unit type`);
     }
   }
@@ -722,7 +746,7 @@ assertDecks();
 // near 50% fights won and ~35% boss kills.
 let RUNG_BONUS = [-3, -2, -2];
 let BOSS_BONUS = -1;
-const MIN_DECK    = 3;         // below this you cannot fill three waves
+const MIN_DECK    = HAND_SIZE; // below this you cannot field a full fight
 const SCATTER_CAP = 1;         // routed cards lost per defeat
 
 const TITLES = {
@@ -821,7 +845,9 @@ let uid = 0;
 function mkSide(src){
   return {
     name: src.name, base: src.base,
-    deck: Array.from({length:COPIES}, ()=>src.deck).flat().map(c=>({...c, id:++uid})),
+    // hp is current morale — the pool that gets worn down. m stays as the
+    // printed maximum, so a card can be shown as 3/7 and rally to full.
+    deck: Array.from({length:COPIES}, ()=>src.deck).flat().map(c=>({...c, id:++uid, hp:c.m})),
     hand: [],
     lanes: emptyLanes(),   // index 0 of each lane === FRONT
     fallen: [],          // routed this fight
@@ -871,6 +897,11 @@ function beginFight(enc){
     you.deck = you.deck.concat(you.fallen);
     you.fallen = [];
   }
+  // Everyone who is still with the warband comes back to full morale. Whether
+  // wounds should instead persist up the ladder is open question 5 in the spec —
+  // it is the obvious place to find the run its missing spine, and also a large
+  // difficulty multiplier, so it waits until the fight itself is tuned.
+  you.deck.forEach(c=>{ c.hp = c.m; delete c.dead; delete c._tag; });
   you.deck = shuffle(you.deck);
   you.hand = you.deck.slice(0, Math.min(HAND_SIZE, you.deck.length));
 
@@ -909,11 +940,11 @@ function cardHTML(c, who, isFront, isFighting){
   // dead cards stay on the board but are inert: no strike, guard, morale, or blocking
   const dead = c.dead ? (c.dead==='eliminated' ? 'gone' : 'routed') : '';
   const cls = ['c', who, (isFront && !c.dead)?'front':'', c.tag?'newly':'', c.reveal?'revealing':'', dead].join(' ');
-  const fate = c.dead ? `<span class="fate">${c.dead==='eliminated'?'ELIMINATED':'ROUTED'}</span>` : '';
+  const fate = c.dead ? `<span class="fate">${c.dead==='eliminated'?'DESTROYED':'BROKEN'}</span>` : '';
   return `<div class="${cls}" data-id="${c.id}">
     <div class="nm"><span class="ty t-${c.t}">${TYPE[c.t].label}</span>${c.n}</div>
     <div class="st">
-      <span class="sv ${isFighting===false?'idle':''}">▲${c.s}</span><span class="gv">⬢${c.g}${c.dugIn?`<span class="dug">+${DUG_IN}</span>`:''}${c.screen?`<span class="dug" title="screening — cannot be broken this clash">↺</span>`:''}</span><span class="mv">✦${c.m}</span>
+      <span class="sv ${isFighting===false?'idle':''}">▲${c.s}</span><span class="gv">⬢${c.g}${c.dugIn?`<span class="dug">+${DUG_IN}</span>`:''}${c.screen?`<span class="dug" title="screening — cannot be broken this clash">↺</span>`:''}</span><span class="mv ${c.hp < c.m ? 'hurt' : ''}">✦${c.hp}${c.hp < c.m ? `<span class="ofm">/${c.m}</span>` : ''}</span>
     </div>${fate}
   </div>`;
 }
@@ -926,7 +957,12 @@ const living  = arr => arr.filter(c=>!c.dead && !c.down);
 // and the front/behind choice use this, never living().
 const present = arr => arr.filter(c=>!c.dead);
 const frontOf = (side,i) => living(side.lanes[i])[0] || null;
-function laneMorale(side, i){ return living(side.lanes[i]).reduce((t,c)=>t+c.m,0); }
+// Bodies on the ground, which is the only thing that scores now.
+function laneCount(side, i){ return living(side.lanes[i]).length; }
+// A round counter alone can no longer end a fight: with a morale pool, a side
+// can be broken off the field entirely before the clashes run out.
+const swept = () => LANE_IX.every(L=>!living(G.you.lanes[L]).length)
+                 || LANE_IX.every(L=>!living(G.them.lanes[L]).length);
 // Only the front rank swings — except archers, who shoot from anywhere in the
 // lane. That is what makes a second unit DEPTH (a replacement) rather than
 // simply more damage, and what makes archers-behind-infantry the natural formation.
@@ -1008,10 +1044,17 @@ function autoAim(att, def){
       let v = LANE_BOUNTY[t] * 0.8;
       if(front){
         const g = effGuard(front);
-        if(front.screen)      v -= 3;                    // it will ride clear anyway
-        else if(power >= g*2) v += 9 + front.m*1.5;
-        else if(power >= g)   v += 5 + front.m;
-        else                  v += power * 0.2;
+        // Damage is the currency now, and finishing a unit is worth more than
+        // the damage alone: a broken unit stops holding the lane, and holding
+        // the lane is the only thing that scores.
+        if(front.screen) v -= 3;                         // it will ride clear anyway
+        else if(power < g) v -= 2;                       // cannot get through at all
+        else {
+          const dmg = power - g;
+          v += Math.min(dmg, front.hp) * 1.6;
+          if(dmg >= front.hp) v += 7;                    // it comes off the lane
+          if(dmg >  front.hp) v += 3;                    // and never comes back
+        }
       }
       if(v > bestV){ bestV = v; best = t; }
     }
@@ -1028,15 +1071,19 @@ function threatLabel(incoming, front){
   if(!incoming) return '&nbsp;';
   if(!front)    return `<span class="thr-open">▲${incoming} · open</span>`;
   const g = effGuard(front);
-  const cls = incoming >= g*2 ? 'thr-elim' : incoming >= g ? 'thr-rout' : 'thr-hold';
-  return `<span class="${cls}">▲${incoming} vs ⬢${g}</span>`;
+  if(front.screen) return `<span class="thr-hold">▲${incoming} vs ⬢${g} · rides clear</span>`;
+  if(incoming < g) return `<span class="thr-hold">▲${incoming} vs ⬢${g} · holds</span>`;
+  const dmg = incoming - g;
+  const cls = dmg >= front.hp ? 'thr-elim' : 'thr-rout';
+  const what = dmg > front.hp ? 'destroys' : dmg === front.hp ? 'breaks' : `−${dmg} of ${front.hp}`;
+  return `<span class="${cls}">▲${incoming} vs ⬢${g} · ${what}</span>`;
 }
 
 function render(){
   const rungLabel = run && run.current
     ? (run.current.isBoss ? 'BOSS' : `rung ${run.rung+1}/3`)
     : 'rung 1/3';
-  const phaseLabel = G.phase === 'deploy' ? 'deploying' : `clash ${Math.min(G.wave,WAVES)-1}/2`;
+  const phaseLabel = G.phase === 'deploy' ? 'deploying' : `clash ${Math.min(G.wave,WAVES)-1}/${CLASHES}`;
   $('#meta').textContent = `${rungLabel} · ${phaseLabel}`;
   $('#eName').textContent = G.them.name;
   $('#eBase').textContent = G.them.base;
@@ -1067,7 +1114,7 @@ function render(){
     // middle of the field, facing yours, the way both sides' fronts should.
     const eStack = G.them.lanes[i].slice().reverse().map(c=>cardHTML(c,'them',c.id===eFrontId,c.dead?undefined:swings.has(c.id))).join('');
     const pStack = G.you.lanes[i].map(c=>cardHTML(c,'you',c.id===pFrontId,c.dead?undefined:swings.has(c.id))).join('');
-    const pm = laneMorale(G.you,i), em = laneMorale(G.them,i);
+    const pm = living(G.you.lanes[i]).length, em = living(G.them.lanes[i]).length;
     const held = pm>em ? '<span class="held" style="color:var(--you)">YOU HOLD</span>'
                : em>pm ? '<span class="held" style="color:var(--them)">THEY HOLD</span>'
                : '<span class="held">CONTESTED</span>';
@@ -1298,12 +1345,16 @@ function assaultHTML(who, total, parts, trace){
     return `<div class="ln"><span class="nmx">${p.name}</span><span class="why">${why}</span><span class="num">▲${p.base}${bon}</span></div>`;
   }).join('');
   const res = trace.map(t=>{
-    const v = t.o==='eliminated' ? '<b class="elim">ELIMINATED</b>'
-            : t.o==='routed'     ? '<b class="rout">ROUTED</b>'
+    const v = t.o==='eliminated' ? '<b class="elim">DESTROYED</b>'
+            : t.o==='broken'     ? '<b class="rout">BREAKS</b>'
+            : t.o==='wounded'    ? `<b class="rout">−${t.dmg}</b> <span class="held">✦${t.left} left</span>`
             : t.o==='screened'   ? '<b class="held">RIDES CLEAR</b>'
                                  : '<b class="held">HOLDS</b>';
+    const why = t.o==='held' || t.o==='screened'
+      ? `${t.had} against ⬢${t.g}`
+      : `${t.had} against ⬢${t.g}, through by ${t.dmg}`;
     return `<div class="ln"><span class="nmx">${t.c.n}</span>`
-         + `<span class="why">${t.had} against ⬢${t.g}${t.c.dugIn?' (dug in)':''}${t.c.screen?' (screening)':''}</span>`
+         + `<span class="why">${why}${t.c.dugIn?' (dug in)':''}${t.c.screen?' (screening)':''}</span>`
          + `<span class="num">${v}</span></div>`;
   }).join('');
   return `<div class="assault"><div class="ahead">${who} <b>▲${total}</b></div>${rows}`
@@ -1366,26 +1417,28 @@ function scoreMove(s, foe, card, L){
       let v = 0;
       const myStrike = laneStrike(s,L) + card.s;
       const foeFront = frontOf(foe, L);          // living front, not a corpse
-      // reward breaking their front card
+      // reward wearing their front card down, and finishing it
       if(foeFront && foeFront.screen){
         v += myStrike * 0.10;                    // nothing to break — it rides clear
       } else if(foeFront){
-        const fg = effGuard(foeFront);           // a braced line is harder to break
-        if(myStrike >= fg*2) v += 8 + foeFront.m*1.5;
-        else if(myStrike >= fg) v += 4 + foeFront.m;
-        else v += myStrike * 0.25;
+        const fg = effGuard(foeFront);           // a braced line is harder to get through
+        if(myStrike < fg) v -= 1;
+        else {
+          const dmg = myStrike - fg;
+          v += Math.min(dmg, foeFront.hp) * 1.2;
+          if(dmg >= foeFront.hp) v += 6;
+        }
       }
-      // reward claiming bounty
-      // (Tried a "swing" version that rewarded flipping a lane over padding one.
-      // Measured worse: the strongest fixed counter went 59% -> 70%, because a
-      // lane you cannot flip scores zero, so the AI stopped contesting at all.
-      // Kept the simple form.)
-      const em = laneMorale(s,L)+card.m, pm = laneMorale(foe,L);
-      if(em > pm) v += LANE_BOUNTY[L] * 1.4;
+      // reward holding the ground — bodies standing, not morale, is what scores
+      const mine = living(s.lanes[L]).length + 1, theirs = living(foe.lanes[L]).length;
+      if(mine > theirs) v += LANE_BOUNTY[L] * 1.4;
       // survivability of the card we're placing (it becomes front)
       const threat = laneStrike(foe,L);
-      if(threat >= card.g*2) v -= 5 + card.m;
-      else if(threat >= card.g) v -= 2 + card.m*0.5;
+      if(threat >= card.g){
+        const incoming = threat - card.g;
+        v -= Math.min(incoming, card.m) * 1.0;
+        if(incoming >= card.m) v -= 5;           // it will not survive to hold anything
+      }
       // ── faction posture ──
       v += P.mass * MASS_W * living(s.lanes[L]).length;      // concentrate / fan out
       // a unit that wants the second rank cares WHAT it is standing behind —
@@ -1448,17 +1501,44 @@ function enemyChoose(){
 
 // ═══════════════════════════════════════════════ RESOLUTION
 // returns [{card, outcome}] applied front-to-back
+// Guard is a WALL, not a discount. You clear it or you achieve nothing; what
+// you clear it by is what wears the defender down.
+//
+//   Strike <  Guard   the line holds, nothing happens
+//   Strike ≥  Guard   (Strike − Guard) comes off the front card's morale
+//   morale 0          breaks and flees — back next fight
+//   morale below 0    eliminated — gone for the run
+//
+// Plain subtractive damage was considered and rejected: with no gate, Guard is
+// a flat discount, every round's answer is "hit the softest thing", and high
+// Guard becomes outright immortality against low Strike. The gate is what keeps
+// "can I get through at all?" a live question, and that question is the whole
+// reason the targeting phase exists.
+//
+// Nothing spills to the rank behind any more. You cannot reach past a card you
+// have not broken — the second rank is depth, and depth has to be chewed through.
 function computeDamage(stack, strike, trace){
-  let rem = strike; const out = [];
-  for(const c of stack){
-    const g = effGuard(c);
-    // screening cavalry absorbs the blow and rides clear — it soaks the same Guard
-    // and lets the overflow through, it just doesn't break
-    if(c.screen && rem >= g){ if(trace) trace.push({c,o:'screened',had:rem,g}); rem -= g; continue; }
-    if(rem >= g*2){ out.push({c, o:'eliminated'}); if(trace) trace.push({c,o:'eliminated',had:rem,g}); rem -= g; }
-    else if(rem >= g){ out.push({c, o:'routed'});  if(trace) trace.push({c,o:'routed',   had:rem,g}); rem -= g; }
-    else { if(trace) trace.push({c,o:'held',had:rem,g}); break; }   // can't reach past an unbroken card
-  }
+  const out = [], c = stack[0];
+  if(!c) return out;
+  const g = effGuard(c);
+
+  if(strike < g){ if(trace) trace.push({c, o:'held', had:strike, g, dmg:0}); return out; }
+
+  // screening cavalry takes the blow and rides clear — it soaks the hit whole
+  if(c.screen){ if(trace) trace.push({c, o:'screened', had:strike, g, dmg:0}); return out; }
+
+  const dmg = strike - g;
+  const left = c.hp - dmg;
+  // Overkill still converts a temporary loss into a permanent one, but it has to
+  // be real overkill. "Past zero = destroyed" was ported straight from the
+  // threshold game and does not survive continuous damage: landing exactly on
+  // zero is a coincidence, so it made destruction the default — measured at 5.5
+  // destroyed a fight against 1.2 broken. Doubling what was needed is the same
+  // idea the old Strike ≥ 2×Guard rule expressed, and it keeps finishing off a
+  // nearly-dead unit as the thing that puts it in the ground for good.
+  const o = left > 0 ? 'wounded' : dmg >= c.hp * OVERKILL ? 'eliminated' : 'broken';
+  if(trace) trace.push({c, o, had:strike, g, dmg, left:Math.max(0,left)});
+  out.push({ c, o, dmg });
   return out;
 }
 
@@ -1625,7 +1705,7 @@ async function commitReserve(lane, atFront){
   G.wave++;
   render();
 
-  if(G.wave > WAVES){ await wait(350); finish(); }
+  if(G.wave > WAVES || swept()){ await wait(350); finish(); }
   else {
     busy = false;
     // keep the tally on screen while they decide — appended, not replaced
@@ -1642,7 +1722,7 @@ function paintTags(){
     if(c && c._tag){
       const d = document.createElement('div');
       d.className = 'tagx ' + (c._tag==='eliminated'?'e':'r');
-      d.textContent = c._tag==='eliminated' ? 'ELIMINATED' : 'ROUTED';
+      d.textContent = c._tag==='eliminated' ? 'DESTROYED' : 'BROKEN';
       el.appendChild(d);
       el.classList.add(c._tag==='eliminated'?'gone':'routed');
     }
@@ -1654,11 +1734,13 @@ function findCard(id){
   return null;
 }
 function applyOutcomes(side, L, outs){
-  for(const {c,o} of outs){
-    c.dead = o;                                  // stays on the board, inert
+  for(const {c,o,dmg} of outs){
+    c.hp = Math.max(0, c.hp - dmg);
+    if(o === 'wounded'){ delete c._tag; continue; }   // still standing, still holding the lane
+    c.dead = o;                                       // stays on the board, inert
     side.deck = side.deck.filter(x=>x.id!==c.id);
     delete c._tag;
-    if(o==='routed') side.fallen.push(c);        // returns next fight
+    if(o === 'broken') side.fallen.push(c);           // rallies for the next fight
     // eliminated: gone for good
   }
 }
@@ -1666,26 +1748,24 @@ function applyOutcomes(side, L, outs){
 // ═══════════════════════════════════════════════ SCORING
 function finish(){
   G.over = true; busy = true;
+  // You win on GROUND, not on bodies. A lane goes to whoever has more of them
+  // still standing on it — and a unit at 1 morale is a whole body, so a battered
+  // line still holds. The only way to take a lane is to break them off it.
+  // Contested lanes have to resolve to someone: if a contested lane paid nobody,
+  // both sides would be paid to avoid contact, and we would have built a longer
+  // battle system while making fighting the wrong move.
   const rows = [];
-  let yTot = G.you.base, tTot = G.them.base;
-  rows.push(['Leader morale', G.you.base, G.them.base]);
-
-  let yField=0, tField=0;
-  for(let L=0;L<LANES;L++){ yField += laneMorale(G.you,L); tField += laneMorale(G.them,L); }
-  yTot += yField; tTot += tField;
-  rows.push(['Surviving cards', yField, tField]);
-
-  let yB=0, tB=0, detail=[];
-  for(let L=0;L<LANES;L++){
-    const pm = laneMorale(G.you,L), em = laneMorale(G.them,L);
-    if(pm>em){ yB += LANE_BOUNTY[L]; detail.push(`L${L+1}→you`); }
-    else if(em>pm){ tB += LANE_BOUNTY[L]; detail.push(`L${L+1}→them`); }
-    else detail.push(`L${L+1}→tie`);
+  let yTot = 0, tTot = 0, detail = [];
+  for(const L of LANE_IX){
+    const yc = living(G.you.lanes[L]).length, tc = living(G.them.lanes[L]).length;
+    if(yc > tc){ yTot += LANE_BOUNTY[L]; detail.push(`L${L+1}→you`); }
+    else if(tc > yc){ tTot += LANE_BOUNTY[L]; detail.push(`L${L+1}→them`); }
+    else detail.push(`L${L+1}→${yc ? 'tie' : 'empty'}`);
+    rows.push([`Lane ${L+1} (bounty ${LANE_BOUNTY[L]}) — ${yc} v ${tc} standing`,
+               yc > tc ? LANE_BOUNTY[L] : 0, tc > yc ? LANE_BOUNTY[L] : 0]);
   }
-  yTot += yB; tTot += tB;
-  rows.push([`Lane bounties (${detail.join(', ')})`, yB, tB]);
 
-  // tiebreak: morale, then most cards left standing, then the defender holds
+  // tiebreak: ground, then bodies left on the field, then the defender holds
   let tieNote = '';
   let won;
   if(yTot !== tTot) won = yTot > tTot;
@@ -1694,8 +1774,8 @@ function finish(){
     const tc = LANE_IX.reduce((t,L)=>t+living(G.them.lanes[L]).length,0);
     won = yc > tc;
     tieNote = yc===tc
-      ? ' · morale and cards tied — the defender holds'
-      : ` · morale tied, broken on cards standing (${yc} v ${tc})`;
+      ? ' · ground and bodies tied — the defender holds'
+      : ` · ground tied, broken on units standing (${yc} v ${tc})`;
   }
 
   const routedNow = G.you.fallen.length;

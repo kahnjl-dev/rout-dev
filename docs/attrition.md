@@ -252,20 +252,70 @@ can say why it went that way.
 
 ## 9. Open questions
 
-Not decided yet. Roughly in the order they'll need answering.
+### Settled in the step-1 build
 
-1. **How many rounds?** Start at 4, not 8. A 4-fight ladder at eight rounds is a
-   ~25-minute run, which is a different product than the one we have.
-2. **Do you still commit a card every round?** The blind-commit hook survives
-   length *only* if a blind commitment happens every round. Front-load the
-   deployment and just resolve rounds and the tension dilutes away.
-3. **Deck and hand size.** More rounds means more cards committed, and 12-card
-   decks were tuned for six a fight.
-4. **What ends a fight?** A round counter alone isn't enough now that a side can
-   be broken off the field entirely. Needs a collapse condition.
-5. **Does damage persist between fights?** If a battered unit stays battered up
-   the ladder, that's the persistent macro spine the run has never had. It's
-   also a big difficulty multiplier.
+1. ~~**How many rounds?**~~ **4 clashes** (`CLASHES`, one constant, sweepable).
+2. ~~**Blind commit every round?**~~ **Yes.** `HAND_SIZE = DEPLOY_N + CLASHES`.
+3. ~~**Deck and hand size?**~~ **16-card decks** — eight unique ×2 — hand of 8.
+4. ~~**What ends a fight?**~~ Four clashes **or** `swept()` — one side with
+   nothing living on the field. (Measured: never fires yet. 0% of fights.)
+
+### Still open
+
+5. **Does damage persist between fights?** Currently no — everyone rallies to
+   full. If wounds carried up the ladder that's the persistent macro spine the
+   run has never had, and a big difficulty multiplier.
 6. **The actual ability list**, and what each one costs.
-7. **Stat values.** The whole retune — nothing from `v2.0-threshold` carries over
-   numerically.
+7. **Stat values.** The retune is not done. See below.
+
+---
+
+## 10. What step 1 measured
+
+The model is in and correct — all four damage cases verified — but the numbers
+are not tuned. Two findings, one of which is a rule problem rather than a
+number problem.
+
+### The wall never holds
+
+```
+held (Strike < Guard):  0.00 per fight, across 13,500 fights
+```
+
+**The gate is inert.** Guard is supposed to be a wall you either clear or
+achieve nothing against, and it has never once stopped an attack. Lane Strike
+aggregates across every unit that can reach — typically 8–15 — against Guards of
+3–7. It always punches through, so "can I get through at all?" is not currently
+a question anyone has to ask, and §1's entire justification is unearned.
+
+Three ways out, in increasing order of how much they change:
+
+- **Numbers.** Push Guard up into the range of aggregated lane Strike. Cheapest,
+  and it's the retune we already owe.
+- **Gate per attacker.** Each striker is compared to Guard individually and only
+  those that clear contribute their excess. A shieldwall then genuinely shrugs
+  off a swarm of weak attackers, and one heavy hitter becomes worth more than
+  three light ones. Bigger change, and arguably the more interesting game.
+- **Leave it.** Accept that Guard is a damage discount and drop the pretence —
+  but then the concentrate-vs-spread decision goes with it.
+
+### Destruction was the default until the overkill rule was restored
+
+Porting "past zero = destroyed" straight across gave **5.51 destroyed against
+1.16 broken** per fight. Landing exactly on zero is a coincidence once damage is
+continuous, so almost every break was a destruction. Restoring the old 2×
+overkill idea (`OVERKILL`, sweepable) brought it to **3.12 against 3.53** —
+survivable, still hot.
+
+### Where the matchups sit
+
+```
+spread          38–61%  (23pt)      — Dwarves are losing badly
+clashes/fight   4.00                — always runs the full length
+swept early     0%
+per fight       62 damage · 5.5 wounded · 3.5 broken · 3.1 destroyed
+```
+
+62 damage a fight against 38 total deck morale is the headline: everything is
+far too lethal, which is the same finding as "the wall never holds" seen from
+the other side.
