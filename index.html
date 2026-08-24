@@ -622,9 +622,21 @@ const LANE_BOUNTY = [2, 3, 4, 3, 2];
 const LANES   = LANE_BOUNTY.length;
 const LANE_IX = [...Array(LANES).keys()];
 const emptyLanes = () => Array.from({length:LANES}, ()=>[]);
+// ── SITUATIONAL BONUSES: PARKED ──────────────────────────────────────────────
+// Everything that added or subtracted numbers based on board state is switched
+// off, so the retune happens against card stats alone. Tuning decks on top of
+// three situational modifiers means never knowing which of the four you are
+// actually measuring — a deck change and a dug-in change can cancel and read as
+// "balanced" while both are wrong.
+//
+// The rules and their code paths are intact; only the magnitudes are zeroed and
+// screening is gated. Flip BONUSES back to true to restore all three at once,
+// which is step 1b — reintroduce them ONE at a time on top of a tuned baseline
+// and measure what each is actually worth.
+const BONUSES = false;
 // A unit with nothing in front of it wheels into a neighbouring fight. Cavalry
 // are built for exactly that, so they hit harder doing it.
-const CAV_FLANK = 3;
+const CAV_FLANK = BONUSES ? 3 : 0;
 const adjacent  = L => [L-1, L+1].filter(x => x >= 0 && x < LANES);
 // A longer engagement. Wave 1 is deployment; every wave after it is a clash,
 // and you commit a card blind at the start of each one — the blind commitment
@@ -653,10 +665,10 @@ const HAND_SIZE = DEPLOY_N + CLASHES;   // the line, plus one reserve per clash
 // clash at all. They are not standing and taking it, they are riding. That
 // restores the spread to 12 points, and it is the same idea stated honestly for
 // each arm — foot holds ground by digging into it, horse by not being there.
-let DUG_IN      = 2;   // let, so it can be swept live
+let DUG_IN      = BONUSES ? 2 : 0;   // let, so it can be swept live
 let OVERKILL    = 2;   // damage this many times the morale left destroys outright
 const canDigIn  = c => c.t !== 'cav';
-const canScreen = c => c.t === 'cav';
+const canScreen = c => BONUSES && c.t === 'cav';
 const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
 const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
 
