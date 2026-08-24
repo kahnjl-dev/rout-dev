@@ -672,48 +672,58 @@ const canScreen = c => BONUSES && c.t === 'cav';
 const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
 const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
 
-// ✦ is no longer a score — it is the pool the unit can absorb before it breaks.
-// That changes what the numbers mean, so all of these are placeholders pending
-// the retune; what is preserved for now is the SHAPE (each faction eight unique
-// cards, the same guard band, the same arm mix) so the retune has a fair
-// starting point rather than three differently-broken decks.
+// ✦ is no longer a score — it is the pool a unit absorbs before it breaks, so
+// the old "every deck totals the same card morale" invariant is gone with it.
+// That rule was right when morale WAS the score: equal totals kept factions on a
+// single axis. Now it is a straitjacket, because it forbids the one trade this
+// model actually prices.
 //
-// Every faction is playable by either side. Base morale is gone — scoring no
-// longer runs through it. Faction identity is arm mix and stat shape only,
-// until leaders arrive with initiative and leadership.
+// Guard double-dips. It gates the blow AND subtracts from it, and it does that
+// on every clash, while morale is a one-time buffer — so over a four-clash fight
+// a point of Guard is worth roughly three of morale. Left unpriced, the high-
+// Guard faction simply wins; the optimiser's answer was to strip the Dwarves to
+// ⬢2 and armour the Goblins to a flat ⬢4, which balanced perfectly and inverted
+// everyone's identity. Pricing it instead:
+//
+//   DWARVES  ⬢5–7 · ✦4–7    armoured and brittle. Little gets through; what
+//                            does goes most of the way through.
+//   GOBLINS  ⬢3–5 · ✦7–10   unarmoured and resilient. Everything lands, almost
+//                            nothing finishes them. A mob you have to chip down.
+//   HUMANS   ⬢4–6 · ✦4–7    middle on both, and the highest Strike band —
+//                            they pay for their armour with reach, not staying power.
 const FACTIONS = {
   HUMANS:{ name:'HUMANS', base:0, col:'#7f9fd0', tag:'H',
     blurb:'Every arm, and an edge in none. They come straight at you.', deck:[
-    {n:'KNIGHTS',    t:'cav', s:7, g:3, m:4},
-    {n:'OUTRIDERS',  t:'cav', s:6, g:3, m:3},
-    {n:'SWORDSMEN',  t:'inf', s:5, g:4, m:5},
-    {n:'LONGBOWS',   t:'arc', s:5, g:3, m:3},
-    {n:'CROSSBOWS',  t:'arc', s:3, g:4, m:4},
-    {n:'HALBERDIERS',t:'inf', s:4, g:5, m:5},
-    {n:'SPEARMEN',   t:'inf', s:3, g:6, m:6},
-    {n:'THE BANNER', t:'inf', s:1, g:7, m:8},
+    {n:'KNIGHTS',      t:'cav', s:7, g:4, m:4},
+    {n:'OUTRIDERS',    t:'cav', s:6, g:4, m:4},
+    {n:'SWORDSMEN',    t:'inf', s:5, g:4, m:5},
+    {n:'LONGBOWS',     t:'arc', s:5, g:4, m:5},
+    {n:'CROSSBOWS',    t:'arc', s:3, g:5, m:5},
+    {n:'HALBERDIERS',  t:'inf', s:4, g:5, m:5},
+    {n:'SPEARMEN',     t:'inf', s:3, g:6, m:6},
+    {n:'THE BANNER',   t:'inf', s:1, g:6, m:7},
   ]},
   GOBLINS:{ name:'GOBLINS', base:0, col:'#8fc46a', tag:'G',
     blurb:'Half of them mounted. They go round your line, not through it.', deck:[
-    {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:3},
-    {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:4},
-    {n:'LANCERS',      t:'cav', s:5, g:4, m:4},
-    {n:'RAIDERS',      t:'cav', s:4, g:4, m:5},
-    {n:'SHORTBOWS',    t:'arc', s:4, g:3, m:4},
-    {n:'FANATICS',     t:'inf', s:6, g:3, m:4},
-    {n:'SPEAR MOB',    t:'inf', s:2, g:6, m:6},
-    {n:'THE IDOL',     t:'inf', s:1, g:7, m:8},
+    {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:7},
+    {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:7},
+    {n:'LANCERS',      t:'cav', s:5, g:3, m:8},
+    {n:'RAIDERS',      t:'cav', s:4, g:4, m:8},
+    {n:'SHORTBOWS',    t:'arc', s:4, g:3, m:8},
+    {n:'FANATICS',     t:'inf', s:6, g:3, m:8},
+    {n:'SPEAR MOB',    t:'inf', s:2, g:4, m:9},
+    {n:'THE IDOL',     t:'inf', s:1, g:5, m:10},
   ]},
   DWARVES:{ name:'DWARVES', base:0, col:'#d9a05b', tag:'D',
     blurb:'No horse in the hold. They stack deep and refuse to move.', deck:[
-    {n:'HAMMERERS',   t:'inf', s:5, g:5, m:4},
-    {n:'CROSSBOWS',   t:'arc', s:5, g:4, m:4},
-    {n:'MINERS',      t:'inf', s:4, g:4, m:3},
-    {n:'IRONBREAKERS',t:'inf', s:3, g:6, m:4},
-    {n:'THUNDERERS',  t:'arc', s:3, g:4, m:5},
-    {n:'LONGBEARDS',  t:'inf', s:4, g:5, m:4},
-    {n:'SHIELD WALL', t:'inf', s:2, g:7, m:6},
-    {n:'THE ANVIL',   t:'inf', s:1, g:7, m:8},
+    {n:'HAMMERERS',    t:'inf', s:5, g:5, m:4},
+    {n:'CROSSBOWS',    t:'arc', s:5, g:5, m:4},
+    {n:'MINERS',       t:'inf', s:4, g:5, m:5},
+    {n:'IRONBREAKERS', t:'inf', s:3, g:6, m:5},
+    {n:'THUNDERERS',   t:'arc', s:3, g:5, m:5},
+    {n:'LONGBEARDS',   t:'inf', s:4, g:6, m:5},
+    {n:'SHIELD WALL',  t:'inf', s:2, g:7, m:6},
+    {n:'THE ANVIL',    t:'inf', s:1, g:7, m:7},
   ]},
 };
 // Each deck is two copies of every card. Eight cards a fight out of twelve was
@@ -732,8 +742,10 @@ function assertDecks(){
   const bad = [];
   for(const k of FACTION_KEYS){
     const f = FACTIONS[k];
-    const total = f.deck.reduce((a,c)=>a+c.m,0);
-    if(total !== 38) bad.push(`${k} card morale ${total}, expected 38`);
+    // Equal card morale across factions is NOT checked any more — morale is a
+    // health pool now, and forcing equal totals forbids the Guard/morale trade
+    // that keeps the factions distinct. What must hold is that every unit can
+    // take at least one hit and that nobody is outside the stat bands.
     if(f.deck.length !== 8) bad.push(`${k} has ${f.deck.length} unique cards, expected 8`);
     // HAND_SIZE, not MIN_DECK — this runs before MIN_DECK is initialised
     if(f.deck.length * COPIES < HAND_SIZE)

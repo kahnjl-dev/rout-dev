@@ -337,3 +337,66 @@ at all. A faction that cannot get through a line cannot take ground, and ground
 is the only thing that scores.
 
 That is the retune, and it is the remaining work in step 1.
+
+
+---
+
+## 11. The retune (step 1 complete)
+
+### Situational bonuses are parked
+
+`BONUSES = false` zeroes dug-in and the cavalry flank bonus and gates screening
+off. The decks are tuned against **card stats alone**. Tuning on top of three
+situational modifiers means never knowing which of the four is being measured —
+a deck change and a dug-in change can cancel and read as balanced while both are
+wrong.
+
+It paid for itself immediately: with the bonuses off the balance **inverted**.
+Dwarves had been the weak faction at 37–38%; without the bonuses Goblins are, at
+35–38%, and Dwarves top the table. Dug-in and screening had been carrying the
+low-Guard faction, and the decks underneath were never balanced at all.
+
+Restoring them is step 1b — one at a time, on top of a tuned baseline, measuring
+what each is actually worth.
+
+### Guard double-dips
+
+The finding that drove the whole retune. Guard **gates** the blow and
+**subtracts** from it, and it does that on every clash, while morale is a
+one-time buffer. Over a four-clash fight a point of Guard is worth roughly three
+of morale.
+
+Left unpriced, the high-Guard faction simply wins. A search over deck deltas
+found a 1-point spread — by stripping the Dwarves to ⬢2 and armouring the
+Goblins to a flat ⬢4. Perfect balance, every faction identity inverted.
+
+A "pure gate" variant was tested as the alternative — clear Guard and the full
+blow lands, no subtraction. Worse on both counts: 28-point spread, and wounded
+fell to 0.4 a fight, which kills the attrition the rework exists for. Rejected.
+
+### The equal-morale invariant is retired
+
+Every deck totalling the same card morale was correct when morale **was** the
+score — equal totals kept factions on a single axis. Now it forbids the only
+trade the model prices, so it is gone. `assertDecks` checks shape and bands
+instead.
+
+Factions are now priced on the Guard ↔ morale trade:
+
+| | Guard | Morale | reads as |
+|---|---|---|---|
+| **DWARVES** | 5–7 | 4–7 (41) | armoured and brittle — little gets through, what does goes most of the way |
+| **GOBLINS** | 3–5 | 7–10 (65) | unarmoured and resilient — everything lands, almost nothing finishes them |
+| **HUMANS** | 4–6 | 4–7 (41) | middle on both, highest Strike — they pay for armour with reach |
+
+### Where it landed
+
+```
+matchups        46–54%   (8pt spread)     mirrors 48 / 49 / 50
+line holds      47.4% of engagements
+per fight       12.2 held · 7.8 wounded · 3.9 broken · 1.8 destroyed
+```
+
+Wounded now outnumbers broken, and broken outnumbers destroyed two to one. That
+ordering is the whole point of the rework: units get worn down, most survive
+being worn, and destruction is the exception rather than the default.
