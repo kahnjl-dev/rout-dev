@@ -1020,6 +1020,12 @@ const defenderAt = (def, t) => living(def.lanes[tLane(t)])[tRank(t)] || null;
 // Reach still depends on the archer's own rank: from the front it can only shoot
 // its own lane (or wheel if that lane faces nothing); from the second rank it
 // reaches its own lane or either neighbour.
+//
+// Worth revisiting, but NOT changed here: deployment puts one card in a lane, so
+// an archer is usually alone and therefore in the front rank — which means an
+// archer sheltering behind a shield wall can shoot next door while one standing
+// in the open cannot. That reads backwards. Left alone deliberately so it isn't
+// tangled up with a targeting-UI fix in the same playtest.
 function legalTargets(att, def, c, L, ix){
   if(!fights(c, ix)) return [];
   const hasFoe = t => living(def.lanes[t]).length > 0;
@@ -1261,7 +1267,10 @@ function render(){
       if(s.opts.length === 1) el.classList.add('aimlocked');
       el.onclick = ev=>{
         ev.stopPropagation();
-        aimSel = (aimSel === s.c.id) ? null : s.c.id;
+        // Always SELECT — never toggle off. askOrders() pre-selects the first
+        // unit needing orders, so a player who clicks the unit they want was
+        // deselecting it and killing every highlight on the board.
+        aimSel = s.c.id;
         sayAim();                      // the stance control follows the selection
         render();
       };
@@ -1369,16 +1378,18 @@ function aimAt(t){
   render();
 }
 
-// A lane click still works when that lane offers the selected unit exactly one
-// target — which is every melee unit, and any archer facing a single defender.
-// Where a lane holds two ranks an archer could pick between, the card must be
-// clicked instead; the lane alone is ambiguous.
+// Clicking a lane means "hit the front of that lane". It used to fire only when
+// the lane offered exactly one target and do nothing at all otherwise — so with
+// an archer selected, clicking a two-rank lane was silently ignored, and the
+// board read as broken. The front rank is the sane default; the back rank is
+// reached by clicking the card itself.
 function aimLane(L){
   if(!aiming || aimSel === null) return;
   const s = strikersOf(G.you, G.them).find(x=>x.c.id === aimSel);
   if(!s) return;
   const here = s.opts.filter(t=>tLane(t) === L);
-  if(here.length === 1) aimAt(here[0]);
+  if(!here.length) return;
+  aimAt(here.find(t=>tRank(t) === 0) ?? here[0]);
 }
 
 // Every unit with exactly one legal target is pointed there for you — there is
