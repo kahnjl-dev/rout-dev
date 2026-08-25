@@ -315,14 +315,28 @@
   .c.aimable{cursor:pointer;box-shadow:0 0 0 1px var(--line)}
   .c.aimable:hover{box-shadow:0 0 0 2px var(--dim)}
   .c.aimsel{box-shadow:0 0 0 2px var(--s), 0 0 16px rgba(255,107,74,.45)!important}
-  .lane.tgt{outline:1px dashed rgba(255,107,74,.4);outline-offset:-2px}
-  .c.targetable{cursor:crosshair;box-shadow:0 0 0 1px rgba(255,107,74,.55)}
-  .c.targetable:hover{box-shadow:0 0 0 2px var(--s)}
+  /* The CARD is the target, not the lane. Highlighting the lane taught the
+     opposite and the cards read as scenery, so the lane cue is gone and every
+     targetable card is lit individually. */
+  .c.targetable{
+    cursor:pointer;border-color:var(--s);
+    box-shadow:0 0 0 1px var(--s), 0 0 12px rgba(255,107,74,.28);
+    animation:tgtpulse 1.6s ease-in-out infinite;
+  }
+  .c.targetable:hover{
+    box-shadow:0 0 0 2px var(--s), 0 0 18px rgba(255,107,74,.5);
+    transform:translateY(-1px);animation:none;
+  }
+  @keyframes tgtpulse{
+    0%,100%{box-shadow:0 0 0 1px var(--s), 0 0 8px rgba(255,107,74,.20)}
+    50%    {box-shadow:0 0 0 1px var(--s), 0 0 15px rgba(255,107,74,.42)}
+  }
+  /* anything of theirs the selected unit cannot reach steps back */
+  .c.them.unreachable{opacity:.38}
   .c .ctag{
     position:absolute;top:-6px;right:-4px;font-size:9.5px;padding:0 3px;
     border-radius:3px;background:#0d0f13;border:1px solid var(--line);
   }
-  .lane.tgt .stack.them{background:rgba(255,107,74,.07);border-radius:8px}
   .strike{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:2.6}
   .strike.head{stroke:#ff6b4a}
   .strike.flank{stroke:#ffc44a}
@@ -1221,8 +1235,7 @@ function render(){
     const full    = present(G.you.lanes[i]).length >= LANE_CAP;
     const canPick = sel!==null && !busy && !G.over && !full;
     const choosing = pendingLane === i;
-    const isTgt    = openTgts.some(t=>tLane(t) === i);
-    return `<div class="lane ${canPick?'pick':''} ${full?'deployed':''} ${resolvingLane===i?'resolving':''} ${isTgt?'tgt':''}" data-lane="${i}">
+    return `<div class="lane ${canPick?'pick':''} ${full?'deployed':''} ${resolvingLane===i?'resolving':''}" data-lane="${i}">
       ${choosing ? `<div class="poschoice">
         <button class="posbtn" data-pos="1">FRONT</button>
         <button class="posbtn" data-pos="0">BEHIND</button></div>` : ''}
@@ -1255,7 +1268,10 @@ function render(){
         const t = TGT(L, r);
         const tag = cardThreat(projMine, G.them, t);
         if(tag) el.insertAdjacentHTML('beforeend', tag);
-        if(!openTgts.includes(t)) return;
+        if(!openTgts.includes(t)){
+          if(aimSel !== null) el.classList.add('unreachable');
+          return;
+        }
         el.classList.add('targetable');
         el.onclick = ev=>{ ev.stopPropagation(); aimAt(t); };
       });
@@ -1369,11 +1385,14 @@ function aimAt(t){
   const s = strikersOf(G.you, G.them).find(x=>x.c.id === aimSel);
   if(!s || !s.opts.includes(t)) return;
   playerAim[aimSel] = t;
-  // step to the next unit that still has a real choice, so a full line can be
-  // aimed without going back to the board between every order
+  // Step to the next unit that still has a real choice, so a whole line can be
+  // aimed without going back to the board between orders. When there is nothing
+  // left to order, KEEP the current unit selected rather than clearing — with
+  // nothing selected, clicking an enemy card does nothing at all, so the moment
+  // you finished aiming was the moment re-aiming stopped responding.
   const rest = strikersOf(G.you, G.them)
     .filter(x=>x.opts.length > 1 && x.c.id !== aimSel && playerAim[x.c.id] === undefined);
-  aimSel = rest.length ? rest[0].c.id : null;
+  if(rest.length) aimSel = rest[0].c.id;
   sayAim();
   render();
 }
@@ -1429,8 +1448,9 @@ function sayAim(){
   const body = !strikersOf(G.you, G.them).length
     ? `Nothing of yours can reach them.`
     : left
-      ? `Tap a unit, then tap the lane it strikes. <b>${left}</b> still ${left===1?'has':'have'} no orders.`
-      : `Every unit has its orders. Change any of them, or send them in.`;
+      ? `Tap one of yours, then tap the <b>enemy unit</b> it strikes — front or back rank. `
+        + `<b>${left}</b> still ${left===1?'has':'have'} no orders.`
+      : `Every unit has its orders. Tap any of yours to re-aim it, or send them in.`;
   say(`<div class="clashhead">GIVE THE ORDER</div>${body}${stanceBtn()}${clashBtn()}`);
   wireStance();
   wireClash();
