@@ -72,6 +72,10 @@
   .c .st span{display:flex;align-items:center;gap:1px}
   .c .sv{color:var(--s)} .c .gv{color:var(--g)} .c .mv{color:var(--m)}
   .c .mv.hurt{color:#e0a04a}
+  .c .sv.up{color:#ff9d5c;font-weight:700}
+  .c .gv.down{color:#7a8fa8}
+  .stance{display:flex;align-items:center;gap:8px;margin-top:7px}
+  .stance .scost{font-size:10.5px;color:var(--faint);letter-spacing:.04em}
   .c .ofm{opacity:.5;font-size:10px;margin-left:0}
   .c .dug{color:var(--m);font-size:9px;vertical-align:1px;margin-left:1px}
   .c .ty{
@@ -311,7 +315,13 @@
   .c.aimable{cursor:pointer;box-shadow:0 0 0 1px var(--line)}
   .c.aimable:hover{box-shadow:0 0 0 2px var(--dim)}
   .c.aimsel{box-shadow:0 0 0 2px var(--s), 0 0 16px rgba(255,107,74,.45)!important}
-  .lane.tgt{outline:1px dashed rgba(255,107,74,.55);outline-offset:-2px;cursor:crosshair}
+  .lane.tgt{outline:1px dashed rgba(255,107,74,.4);outline-offset:-2px}
+  .c.targetable{cursor:crosshair;box-shadow:0 0 0 1px rgba(255,107,74,.55)}
+  .c.targetable:hover{box-shadow:0 0 0 2px var(--s)}
+  .c .ctag{
+    position:absolute;top:-6px;right:-4px;font-size:9.5px;padding:0 3px;
+    border-radius:3px;background:#0d0f13;border:1px solid var(--line);
+  }
   .lane.tgt .stack.them{background:rgba(255,107,74,.07);border-radius:8px}
   .strike{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:2.6}
   .strike.head{stroke:#ff6b4a}
@@ -561,48 +571,42 @@ DWARVES   spread out and hold every lane</div>
 
     <h3>THE THREE ARMS</h3>
     <ul>
-      <li><b>Infantry</b> — holds. Only strikes from the front rank.</li>
-      <li><b>Cavalry</b> — strikes from the front rank, and hits for
-        <b>+3</b> going through a gap. Never digs in.</li>
-      <li><b>Archers</b> — shoot from <b>any</b> rank. From the second rank they
-        can shoot their own lane <b>or either neighbour</b>.</li>
+      <li><b>Infantry</b> — holds the line. Strikes only from the front rank.</li>
+      <li><b>Cavalry</b> — strikes only from the front rank, and can <b>CHARGE</b>:
+        <b>▲+3 ⬢−2</b> for one clash. Nothing else can.</li>
+      <li><b>Archers</b> — shoot from <b>any</b> rank, and shoot <b>over</b> the
+        front: they can pick the front or the back rank of whatever they can reach.
+        From the second rank that means their own lane or either neighbour.</li>
     </ul>
-    A unit behind another unit is depth, not a queue — which is why archers want
-    cover and infantry want the front.
+    A unit behind another is depth, not a queue — but depth is no shelter from
+    archers.
 
     <h3>ORDERS</h3>
-    Nothing resolves until you say so. Tap a unit, then tap the lane it strikes.
+    Nothing resolves until you say so. Tap a unit, then tap the enemy it strikes.
     <ul>
-      <li>A front-rank unit facing someone fights <b>that lane</b>.</li>
+      <li>A front-rank unit facing someone fights <b>the front card</b> of that lane.</li>
       <li>A front-rank unit facing <b>nothing</b> must wheel into a neighbour.</li>
-      <li>A second-rank archer picks from up to three lanes.</li>
+      <li>An archer picks a <b>card</b>, not a lane — front or back.</li>
+      <li>Cavalry may charge, at the price of its own Guard.</li>
     </ul>
-    Units with only one legal target are pointed there for you.
+    Units with only one legal target are pointed there for you. Nothing happens
+    until you press <b>CLASH</b>.
 
-    <h3>THE OPENING LINE</h3>
-    Units placed during deployment are ready for the first clash, and each arm is
-    ready in its own way:
+    <h3>DAMAGE</h3>
+    Guard is a <b>wall</b>, not a discount:
     <ul>
-      <li><b>Foot</b> is <b>dug in</b> — <b>+2 Guard</b> for the first clash only.</li>
-      <li><b>Horse</b> is <b>screening</b> — it cannot be broken in the first
-        clash at all. It absorbs the blow, lets the overflow through, and rides clear.</li>
+      <li>Strike <b>&lt;</b> Guard → <b class="held">the line holds</b>. Nothing at all.</li>
+      <li>Strike <b>≥</b> Guard → the <b>difference</b> comes off their ✦ Morale.</li>
+      <li>✦ reaches <b>0</b> → <b style="color:var(--m)">BREAKS</b>. Off the field, back next fight.</li>
+      <li>Damage <b>≥ 2×</b> the ✦ it had left → <b style="color:var(--s)">DESTROYED</b>. Gone for the run.</li>
     </ul>
-
-    <h3>BREAKING A CARD</h3>
-    <ul>
-      <li>Strike <b>≥</b> their Guard → <b style="color:var(--m)">ROUTED</b>. Scores nothing this fight, returns for the next one.</li>
-      <li>Strike <b>≥ 2×</b> their Guard → <b style="color:var(--s)">ELIMINATED</b>. Gone from your warband for the whole run.</li>
-    </ul>
-    Leftover Strike carries to the card behind. You can't reach past a card you didn't break.
+    Damage does <b>not</b> carry to the card behind. Excess is spent on the unit
+    in front of it — the only way past a card is through it, or over it with archers.
 
     <h3>WINNING</h3>
-    You win on morale, not kills:
-    <ul>
-      <li>your <b>leader morale</b></li>
-      <li>+ <b>✦ Morale</b> of your cards still standing</li>
-      <li>+ <b>lane bounties</b> (2/3/4/3/2) to whoever holds the most morale in that lane</li>
-    </ul>
-    Routing a card denies its morale just as well as killing it.
+    You win on <b>ground</b>, not kills. Each lane's bounty goes to whoever has
+    <b>more units still standing</b> in it. A unit on ✦1 is a whole body holding
+    ground — to take a lane you have to break them off it.
 
     <h3>THE RUN</h3>
     Three rungs then a boss. You choose your road each rung. Lose a fight and your routed
@@ -622,21 +626,12 @@ const LANE_BOUNTY = [2, 3, 4, 3, 2];
 const LANES   = LANE_BOUNTY.length;
 const LANE_IX = [...Array(LANES).keys()];
 const emptyLanes = () => Array.from({length:LANES}, ()=>[]);
-// ── SITUATIONAL BONUSES: PARKED ──────────────────────────────────────────────
-// Everything that added or subtracted numbers based on board state is switched
-// off, so the retune happens against card stats alone. Tuning decks on top of
-// three situational modifiers means never knowing which of the four you are
-// actually measuring — a deck change and a dug-in change can cancel and read as
-// "balanced" while both are wrong.
-//
-// The rules and their code paths are intact; only the magnitudes are zeroed and
-// screening is gated. Flip BONUSES back to true to restore all three at once,
-// which is step 1b — reintroduce them ONE at a time on top of a tuned baseline
-// and measure what each is actually worth.
-const BONUSES = false;
-// A unit with nothing in front of it wheels into a neighbouring fight. Cavalry
-// are built for exactly that, so they hit harder doing it.
-const CAV_FLANK = BONUSES ? 3 : 0;
+// State-based bonuses are GONE. Dug-in, the cavalry flank bonus and screening
+// were all automatic: they fired by themselves, cost nothing, and asked the
+// player for no decision. Worse, they were carrying the balance — with all
+// three switched off the matchups inverted outright, which showed the decks
+// underneath had never been balanced at all. The decks are tuned without them
+// now, and what differentiates the arms is a CHOSEN stance instead.
 const adjacent  = L => [L-1, L+1].filter(x => x >= 0 && x < LANES);
 // A longer engagement. Wave 1 is deployment; every wave after it is a clash,
 // and you commit a card blind at the start of each one — the blind commitment
@@ -647,30 +642,25 @@ let CLASHES = 4;
 const WAVES = 1 + CLASHES;
 const DEPLOY_N  = 4;      // opening line, at most two to any one lane
 const HAND_SIZE = DEPLOY_N + CLASHES;   // the line, plus one reserve per clash
-// A prepared line is braced for the first clash. Re-checked after the rank
-// rules landed, on the theory it might no longer be earning its place: it is.
-// At +0 the first clash still takes 67% of all destruction and the nine
-// matchups spread 38-71%. At +3 the split is even and the spread is 42-56%.
-// A flat Guard bonus is worth proportionally more to a fragile unit — +3 on a
-// goblin's 3 doubles it, on a dwarf's 7 it is a 43% bump — so it also pulls
-// the factions together rather than favouring the tough ones.
-// Foot troops brace, plant stakes and dress the line; horse does not — cavalry
-// standing still is cavalry wasted. So the opening bonus is foot only.
-// Cutting it from cavalry and giving nothing back was measured and it wrecks the
-// game: the bonus becomes a per-deck subsidy, so the all-foot Dwarves beat the
-// half-mounted Goblins 79-19 and the nine matchups spread 60 points. Adding
-// Strike back (a charge bonus) does not fix it — Goblins do not need to hit
-// harder in clash 1, they need to still be there for clash 2.
-// So opening-line cavalry SCREEN instead: they cannot be broken in the first
-// clash at all. They are not standing and taking it, they are riding. That
-// restores the spread to 12 points, and it is the same idea stated honestly for
-// each arm — foot holds ground by digging into it, horse by not being there.
-let DUG_IN      = BONUSES ? 2 : 0;   // let, so it can be swept live
 let OVERKILL    = 2;   // damage this many times the morale left destroys outright
-const canDigIn  = c => c.t !== 'cav';
-const canScreen = c => BONUSES && c.t === 'cav';
 const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
-const effGuard  = c => c.g + (c.dugIn ? DUG_IN : 0);
+
+// ── STANCES ──────────────────────────────────────────────────────────────────
+// The first ability, and the thing that gives cavalry an identity again. With
+// the flank bonus gone, horse and foot were mechanically the same unit: same
+// rank rules, same targeting, no modifier anywhere. CHARGE says what that +3
+// was trying to say, except now it is a decision with a price and a visible
+// tell rather than a rule that fires by itself.
+//
+// Step 2 of the spec deliberately stops here: one ability, one arm, chosen at
+// the same time as targeting, no leadership cost and no alternation. Those are
+// step 3, and they are only worth building on a stance that already earns its
+// place.
+let CHARGE_S = 3, CHARGE_G = 2;
+const canCharge  = c => c.t === 'cav';
+const isCharging = c => c.stance === 'charge';
+const effStrike  = c => c.s + (isCharging(c) ? CHARGE_S : 0);
+const effGuard   = c => Math.max(1, c.g - (isCharging(c) ? CHARGE_G : 0));
 
 // ✦ is no longer a score — it is the pool a unit absorbs before it breaks, so
 // the old "every deck totals the same card morale" invariant is gone with it.
@@ -968,7 +958,7 @@ function cardHTML(c, who, isFront, isFighting){
   return `<div class="${cls}" data-id="${c.id}">
     <div class="nm"><span class="ty t-${c.t}">${TYPE[c.t].label}</span>${c.n}</div>
     <div class="st">
-      <span class="sv ${isFighting===false?'idle':''}">▲${c.s}</span><span class="gv">⬢${c.g}${c.dugIn?`<span class="dug">+${DUG_IN}</span>`:''}${c.screen?`<span class="dug" title="screening — cannot be broken this clash">↺</span>`:''}</span><span class="mv ${c.hp < c.m ? 'hurt' : ''}">✦${c.hp}${c.hp < c.m ? `<span class="ofm">/${c.m}</span>` : ''}</span>
+      <span class="sv ${isFighting===false?'idle':''} ${isCharging(c)?'up':''}">▲${effStrike(c)}</span><span class="gv ${isCharging(c)?'down':''}">⬢${effGuard(c)}${isCharging(c)?`<span class="dug" title="charging">⇈</span>`:''}</span><span class="mv ${c.hp < c.m ? 'hurt' : ''}">✦${c.hp}${c.hp < c.m ? `<span class="ofm">/${c.m}</span>` : ''}</span>
     </div>${fate}
   </div>`;
 }
@@ -992,7 +982,7 @@ const swept = () => LANE_IX.every(L=>!living(G.you.lanes[L]).length)
 // simply more damage, and what makes archers-behind-infantry the natural formation.
 const fights = (c, ix) => ix === 0 || c.t === 'arc';
 function laneStrike(side, i){
-  return living(side.lanes[i]).reduce((t,c,ix)=> t + (fights(c,ix) ? c.s : 0), 0);
+  return living(side.lanes[i]).reduce((t,c,ix)=> t + (fights(c,ix) ? effStrike(c) : 0), 0);
 }
 const isUnopposed  = (att, def, L) => living(att.lanes[L]).length && !living(def.lanes[L]).length;
 // you may only wheel into a neighbour that actually has someone in it
@@ -1010,18 +1000,44 @@ const flankTargets = (def, L)      => adjacent(L).filter(t => living(def.lanes[t
 //   anything else behind   waits
 // A lane with nobody living in it is never a legal target: there is nothing to
 // shoot at, and an empty lane is taken on morale, not on damage.
+// ── TARGETS ──────────────────────────────────────────────────────────────────
+// A target is no longer a lane, it is a SPECIFIC DEFENDER: which lane, and
+// which rank within it. Encoded as one small integer so it can key a map.
+const TGT   = (L, r) => L * 2 + r;
+const tLane = t => t >> 1;
+const tRank = t => t & 1;
+const defenderAt = (def, t) => living(def.lanes[tLane(t)])[tRank(t)] || null;
+
+// Who may this unit shoot at?
+//
+//   front rank, opposed     the enemy front card of its own lane, and nothing else
+//   front rank, unopposed   must wheel ±1 into a neighbour — again, their front
+//   archers                 ANY rank of any lane they can reach. An archer shoots
+//                           over the front rank, so the unit sheltering behind a
+//                           shield wall is not safe from one.
+//   second rank, not arc    waits
+//
+// Reach still depends on the archer's own rank: from the front it can only shoot
+// its own lane (or wheel if that lane faces nothing); from the second rank it
+// reaches its own lane or either neighbour.
 function legalTargets(att, def, c, L, ix){
   if(!fights(c, ix)) return [];
   const hasFoe = t => living(def.lanes[t]).length > 0;
-  if(c.t === 'arc' && ix > 0) return [L, ...adjacent(L)].filter(hasFoe);
-  return hasFoe(L) ? [L] : adjacent(L).filter(hasFoe);
+  const lanes = c.t === 'arc' && ix > 0
+    ? [L, ...adjacent(L)].filter(hasFoe)
+    : (hasFoe(L) ? [L] : adjacent(L).filter(hasFoe));
+  const out = [];
+  for(const t of lanes){
+    const stack = living(def.lanes[t]);
+    if(c.t === 'arc') stack.forEach((_, r)=>out.push(TGT(t, r)));   // pick your rank
+    else out.push(TGT(t, 0));                                       // melee goes through the front
+  }
+  return out;
 }
 
-// Cavalry are built to go through a gap, so they hit harder doing it — but only
-// when the gap is real: their own lane faces nothing and they are wheeling.
-// An archer arcing over a neighbour gets no bonus; it is the same volley.
-const aimBonus = (att, def, c, L, t) =>
-  (c.t === 'cav' && t !== L && !living(def.lanes[L]).length) ? CAV_FLANK : 0;
+// Cavalry no longer hit harder for wheeling — nothing modifies Strike by board
+// state. A unit hits for what it hits for, plus whatever stance it was given.
+const aimBonus = () => 0;
 
 // Every unit that can strike and has somewhere to send it.
 function strikersOf(att, def){
@@ -1034,56 +1050,95 @@ function strikersOf(att, def){
   return out;
 }
 
-// Total Strike arriving in each lane, given a map of {cardId: targetLane}.
-// Returns, per lane, the incoming total AND an itemised list of where every
-// point came from. The breakdown is the whole point: with rank rules, wheeling,
-// arcing fire and dug-in guards, a bare total tells the player nothing about why.
+// Total Strike arriving on each DEFENDER, given a map of {cardId: target}.
+// Indexed by target code, so the front and back of a lane accumulate separately
+// and never pool — which is the point of letting archers pick a rank.
 function buildAssault(att, def, aim){
-  const inc = LANE_IX.map(()=>({ total:0, parts:[] }));
+  const inc = Array.from({length: LANES * 2}, ()=>({ total:0, parts:[] }));
   for(const { c, L, ix } of strikersOf(att, def)){
     const t = aim[c.id];
     if(t === undefined || t === null) continue;
-    const bonus = aimBonus(att, def, c, L, t);
-    inc[t].total += c.s + bonus;
-    inc[t].parts.push({ c, name:c.n, type:c.t, base:c.s, bonus, from:L, to:t,
-                        wheeled: t !== L, arced: c.t === 'arc' && t !== L, rank:ix });
+    inc[t].total += effStrike(c);
+    inc[t].parts.push({ c, name:c.n, type:c.t, base:c.s,
+                        bonus: isCharging(c) ? CHARGE_S : 0, from:L, to:t,
+                        wheeled: tLane(t) !== L, arced: c.t === 'arc' && tLane(t) !== L,
+                        overhead: c.t === 'arc' && tRank(t) > 0, rank:ix });
   }
   return inc;
 }
-const assaultTotals = a => a.map(x=>x.total);
+// what a whole lane is facing, for the lane-level readout
+const laneIncoming = (inc, L) => inc[TGT(L,0)].total + inc[TGT(L,1)].total;
 
 // Where each unit does the most damage. Drives the enemy, fills in the player's
 // units that have only one legal target, and projects the threat readouts.
 // Assigned in sequence with a running tally of what is already aimed at each
 // lane, so weight CONCENTRATES: the second archer sees that the first one has
 // already softened a lane and piles on rather than spreading itself thin.
+// Enemy stances are SCRIPTED, not evaluated — one legible rule the player can
+// learn and play around, rather than a scoring function whose output is noise.
+//
+// The rule: charge only when it converts a blow that would NOT break the
+// defender into one that does. Never otherwise.
+//
+// The first version had Goblins charge every time, for flavour. Measured, it
+// was ruinous — GvD 71%, GvH 68%, the spread out to 41 points — and it failed
+// for the same reason dug-in did: a flat modifier is a per-deck subsidy, and
+// Goblins field four cavalry to the Humans' two and the Dwarves' none. Worse,
+// the −Guard price is not a real price for them; at ✦7–10 they can afford the
+// extra damage, where a Dwarf at ✦4 cannot.
+//
+// So faction character comes from WHEN a deck gets to charge, not from charging
+// recklessly. Measured, Goblins and Humans charge equally often — 0.61 a fight
+// each — despite Goblins fielding twice the cavalry: theirs is spread thinner
+// (▲7/6/5/4 against ▲7/6), so fewer of their horse can reach the break
+// threshold that makes a charge worth paying for. Numbers of cavalry buy
+// opportunities; Strike is what converts them.
+function scriptStances(att, def){
+  for(const L of LANE_IX)
+    living(att.lanes[L]).forEach((c, ix)=>{
+      delete c.stance;
+      if(!canCharge(c) || !fights(c, ix)) return;
+      const foe = frontOf(def, L);
+      if(!foe) return;
+      const g = effGuard(foe);
+      if(c.s + CHARGE_S - g >= foe.hp && c.s - g < foe.hp) c.stance = 'charge';
+    });
+}
+
 function autoAim(att, def){
-  const aim = {}, pending = LANE_IX.map(()=>0);
-  for(const { c, L, opts } of strikersOf(att, def)){
-    if(opts.length === 1){ aim[c.id] = opts[0]; pending[opts[0]] += c.s; continue; }
+  const aim = {}, pending = Array(LANES * 2).fill(0);
+  for(const { c, opts } of strikersOf(att, def)){
+    if(opts.length === 1){ aim[c.id] = opts[0]; pending[opts[0]] += effStrike(c); continue; }
     let best = opts[0], bestV = -Infinity;
     for(const t of opts){
-      const power = pending[t] + c.s + aimBonus(att, def, c, L, t);
-      const front = frontOf(def, t);
-      let v = LANE_BOUNTY[t] * 0.8;
-      if(front){
-        const g = effGuard(front);
-        // Damage is the currency now, and finishing a unit is worth more than
-        // the damage alone: a broken unit stops holding the lane, and holding
-        // the lane is the only thing that scores.
-        if(front.screen) v -= 3;                         // it will ride clear anyway
-        else if(power < g) v -= 2;                       // cannot get through at all
-        else {
-          const dmg = power - g;
-          v += Math.min(dmg, front.hp) * 1.6;
-          if(dmg >= front.hp) v += 7;                    // it comes off the lane
-          if(dmg >  front.hp) v += 3;                    // and never comes back
-        }
+      const power = pending[t] + effStrike(c);
+      const d = defenderAt(def, t);
+      if(!d) continue;
+      let v = LANE_BOUNTY[tLane(t)] * 0.8;
+      const g = effGuard(d);
+      // Damage is the currency, and finishing a unit is worth more than the
+      // damage alone: a broken unit stops holding the lane, and holding the lane
+      // is the only thing that scores.
+      if(power < g) v -= 2;                              // cannot get through at all
+      else {
+        const dmg = power - g;
+        v += Math.min(dmg, d.hp) * 1.6;
+        if(dmg >= d.hp) v += 7;                          // it comes off the lane
+        if(dmg >  d.hp) v += 3;                          // and never comes back
       }
+      // Shooting over the front rank does not open the lane, so as a way to take
+      // ground it is worth less than hitting the front. What makes it worth
+      // doing is WHAT is back there: a second-rank archer is a live striker and
+      // killing it silences fire for the rest of the fight, while second-rank
+      // infantry is inert and shooting it achieves almost nothing until it steps
+      // up. Scoring the rank flatly missed that entirely and the AI used the
+      // option in 0.9% of shots — a choice that is wrong 99 times in 100 is not
+      // a choice.
+      if(tRank(t) > 0) v += d.t === 'arc' ? 4 : -3;
       if(v > bestV){ bestV = v; best = t; }
     }
     aim[c.id] = best;
-    pending[best] += c.s + aimBonus(att, def, c, L, best);
+    pending[best] += effStrike(c);
   }
   return aim;
 }
@@ -1091,16 +1146,26 @@ function autoAim(att, def){
 // What a lane is actually facing, given everything that will wheel into it.
 // Colour says what that total does to the defender, so the reinforce decision
 // is made against the real number instead of a mental sum.
-function threatLabel(incoming, front){
+function threatLabel(incoming, d){
   if(!incoming) return '&nbsp;';
-  if(!front)    return `<span class="thr-open">▲${incoming} · open</span>`;
-  const g = effGuard(front);
-  if(front.screen) return `<span class="thr-hold">▲${incoming} vs ⬢${g} · rides clear</span>`;
+  if(!d)        return `<span class="thr-open">▲${incoming} · open</span>`;
+  const g = effGuard(d);
   if(incoming < g) return `<span class="thr-hold">▲${incoming} vs ⬢${g} · holds</span>`;
   const dmg = incoming - g;
-  const cls = dmg >= front.hp ? 'thr-elim' : 'thr-rout';
-  const what = dmg > front.hp ? 'destroys' : dmg === front.hp ? 'breaks' : `−${dmg} of ${front.hp}`;
+  const cls = dmg >= d.hp ? 'thr-elim' : 'thr-rout';
+  const what = dmg >= d.hp * OVERKILL ? 'destroys' : dmg >= d.hp ? 'breaks' : `−${dmg} of ${d.hp}`;
   return `<span class="${cls}">▲${incoming} vs ⬢${g} · ${what}</span>`;
+}
+// Ranks are aimed at separately now, so the number that matters sits on the
+// CARD, not on the lane. The lane line keeps the total for a quick read.
+function cardThreat(inc, def, t){
+  const n = inc[t].total;
+  if(!n) return '';
+  const d = defenderAt(def, t);
+  if(!d) return '';
+  const g = effGuard(d), dmg = n - g;
+  const cls = n < g ? 'thr-hold' : dmg >= d.hp ? 'thr-elim' : 'thr-rout';
+  return `<span class="ctag ${cls}">▲${n}</span>`;
 }
 
 function render(){
@@ -1150,23 +1215,23 @@ function render(){
     const full    = present(G.you.lanes[i]).length >= LANE_CAP;
     const canPick = sel!==null && !busy && !G.over && !full;
     const choosing = pendingLane === i;
-    const isTgt    = openTgts.includes(i);
+    const isTgt    = openTgts.some(t=>tLane(t) === i);
     return `<div class="lane ${canPick?'pick':''} ${full?'deployed':''} ${resolvingLane===i?'resolving':''} ${isTgt?'tgt':''}" data-lane="${i}">
       ${choosing ? `<div class="poschoice">
         <button class="posbtn" data-pos="1">FRONT</button>
         <button class="posbtn" data-pos="0">BEHIND</button></div>` : ''}
-      <div class="ltot">${threatLabel(projMine[i].total, eFront)}${eWheel?' <span class="wheel">⇢</span>':''}</div>
+      <div class="ltot">${threatLabel(laneIncoming(projMine,i), eFront)}${eWheel?' <span class="wheel">⇢</span>':''}</div>
       <div class="stack them">${eStack}</div>
       <div class="bounty">BOUNTY <b>${b}</b>${held}</div>
       <div class="stack you">${pStack}</div>
-      <div class="ltot">${threatLabel(projTheirs[i].total, pFront)}${yWheel?' <span class="wheel">⇢</span>':''}</div>
+      <div class="ltot">${threatLabel(laneIncoming(projTheirs,i), pFront)}${yWheel?' <span class="wheel">⇢</span>':''}</div>
     </div>`;
   }).join('');
 
   document.querySelectorAll('.lane').forEach(el=>{
     el.onclick = ()=>{
       const L = +el.dataset.lane;
-      if(aiming) return aimAt(L);
+      if(aiming) return aimLane(L);
       if(sel!==null && !busy && !G.over) place(L);
     };
   });
@@ -1174,8 +1239,20 @@ function render(){
     b.onclick = ev=>{ ev.stopPropagation(); placeAt(pendingLane, b.dataset.pos === '1'); };
   });
 
-  // ── aiming: your own units become the clickable thing ──
+  // ── aiming: your units are selectable, their units are targetable ──
   if(aiming){
+    // tag every enemy card with what is currently aimed at IT
+    for(const L of LANE_IX)
+      living(G.them.lanes[L]).forEach((d, r)=>{
+        const el = cardEl(d);
+        if(!el) return;
+        const t = TGT(L, r);
+        const tag = cardThreat(projMine, G.them, t);
+        if(tag) el.insertAdjacentHTML('beforeend', tag);
+        if(!openTgts.includes(t)) return;
+        el.classList.add('targetable');
+        el.onclick = ev=>{ ev.stopPropagation(); aimAt(t); };
+      });
     for(const s of strikers){
       const el = cardEl(s.c);
       if(!el) continue;
@@ -1185,6 +1262,7 @@ function render(){
       el.onclick = ev=>{
         ev.stopPropagation();
         aimSel = (aimSel === s.c.id) ? null : s.c.id;
+        sayAim();                      // the stance control follows the selection
         render();
       };
     }
@@ -1258,12 +1336,14 @@ function drawAims(){
   for(const { c, L } of strikersOf(G.you, G.them)){
     const t = playerAim[c.id];
     if(t === undefined || t === null) continue;
-    const aEl = cardEl(c), dEl = frontOf(G.them, t) && cardEl(frontOf(G.them, t));
+    const d = defenderAt(G.them, t);
+    const aEl = cardEl(c), dEl = d && cardEl(d);
     if(!aEl || !dEl) continue;
     const [x1,y1] = centerOf(aEl), [x2,y2] = centerOf(dEl);
     const p = document.createElementNS('http://www.w3.org/2000/svg','path');
-    p.setAttribute('d', strikeArc(x1,y1,x2,y2, t !== L ? 46 : 8));
-    p.setAttribute('class', 'aimline ' + (t !== L ? 'flank' : 'head') + (c.id === aimSel ? ' on' : ''));
+    const sideways = tLane(t) !== L;
+    p.setAttribute('d', strikeArc(x1,y1,x2,y2, sideways ? 46 : 8));
+    p.setAttribute('class', 'aimline ' + (sideways ? 'flank' : 'head') + (c.id === aimSel ? ' on' : ''));
     svg.appendChild(p);
     const ux=(x2-x1)/(Math.hypot(x2-x1,y2-y1)||1), uy=(y2-y1)/(Math.hypot(x2-x1,y2-y1)||1);
     const h = document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -1274,12 +1354,12 @@ function drawAims(){
 }
 addEventListener('resize', ()=>{ if(aiming) drawAims(); });
 
-// Clicking a lane while a unit is selected points that unit at it.
-function aimAt(L){
+// Point the selected unit at one specific defender.
+function aimAt(t){
   if(!aiming || aimSel === null) return;
   const s = strikersOf(G.you, G.them).find(x=>x.c.id === aimSel);
-  if(!s || !s.opts.includes(L)) return;
-  playerAim[aimSel] = L;
+  if(!s || !s.opts.includes(t)) return;
+  playerAim[aimSel] = t;
   // step to the next unit that still has a real choice, so a full line can be
   // aimed without going back to the board between every order
   const rest = strikersOf(G.you, G.them)
@@ -1287,6 +1367,18 @@ function aimAt(L){
   aimSel = rest.length ? rest[0].c.id : null;
   sayAim();
   render();
+}
+
+// A lane click still works when that lane offers the selected unit exactly one
+// target — which is every melee unit, and any archer facing a single defender.
+// Where a lane holds two ranks an archer could pick between, the card must be
+// clicked instead; the lane alone is ambiguous.
+function aimLane(L){
+  if(!aiming || aimSel === null) return;
+  const s = strikersOf(G.you, G.them).find(x=>x.c.id === aimSel);
+  if(!s) return;
+  const here = s.opts.filter(t=>tLane(t) === L);
+  if(here.length === 1) aimAt(here[0]);
 }
 
 // Every unit with exactly one legal target is pointed there for you — there is
@@ -1298,6 +1390,29 @@ function seedAim(){
 }
 const unaimed = () => strikersOf(G.you, G.them).filter(s=>playerAim[s.c.id] === undefined);
 
+// The stance control only appears when a unit that can take one is selected —
+// which today means cavalry. It sits in the same panel as the orders text, so
+// choosing a stance is the same gesture as giving a target.
+function stanceBtn(){
+  if(aimSel === null) return '';
+  const s = strikersOf(G.you, G.them).find(x=>x.c.id === aimSel);
+  if(!s || !canCharge(s.c)) return '';
+  const on = isCharging(s.c);
+  return `<div class="stance">
+    <button class="btn ${on?'p':''}" id="goCharge">${on?'✓ CHARGING':'CHARGE'}</button>
+    <span class="scost">▲+${CHARGE_S} ⬢−${CHARGE_G}, this clash</span></div>`;
+}
+function wireStance(){
+  const b = $('#goCharge');
+  if(!b) return;
+  b.onclick = ()=>{
+    const s = strikersOf(G.you, G.them).find(x=>x.c.id === aimSel);
+    if(!s) return;
+    if(isCharging(s.c)) delete s.c.stance; else s.c.stance = 'charge';
+    sayAim(); render();
+  };
+}
+
 function sayAim(){
   const left = unaimed().length;
   const body = !strikersOf(G.you, G.them).length
@@ -1305,7 +1420,8 @@ function sayAim(){
     : left
       ? `Tap a unit, then tap the lane it strikes. <b>${left}</b> still ${left===1?'has':'have'} no orders.`
       : `Every unit has its orders. Change any of them, or send them in.`;
-  say(`<div class="clashhead">GIVE THE ORDER</div>${body}${clashBtn()}`);
+  say(`<div class="clashhead">GIVE THE ORDER</div>${body}${stanceBtn()}${clashBtn()}`);
+  wireStance();
   wireClash();
 }
 const clashBtn = () =>
@@ -1324,17 +1440,16 @@ function askOrders(){
 }
 
 // one side's blows into one lane, then the damage cascading front to back
-async function playAssault(parts, defenders, trace){
-  if(!parts.length || !defenders.length) return;
-  const tEl = cardEl(defenders[0]);
-  if(!tEl) return;
-  const [tx,ty] = centerOf(tEl);
+async function playAssault(parts, defSide, trace){
+  if(!parts.length) return;
 
   for(const p of parts){
     const aEl = cardEl(p.c);
-    if(!aEl) continue;
-    const [ax,ay] = centerOf(aEl);
-    drawStrike(ax, ay, tx, ty, p.wheeled);
+    const d   = defenderAt(defSide, p.to);
+    const tEl = d && cardEl(d);
+    if(!aEl || !tEl) continue;
+    const [ax,ay] = centerOf(aEl), [tx,ty] = centerOf(tEl);
+    drawStrike(ax, ay, tx, ty, p.wheeled || p.overhead);
     aEl.classList.add('lunge');
     setTimeout(()=>aEl.classList.remove('lunge'), 280);
     await wait(130);
@@ -1353,8 +1468,8 @@ async function playAssault(parts, defenders, trace){
 }
 
 async function playClash(p){
-  await playAssault(p.pParts, living(G.them.lanes[p.L]), p.traceThem);
-  await playAssault(p.eParts, living(G.you.lanes[p.L]),  p.traceYou);
+  await playAssault(p.pParts, G.them, p.traceThem);
+  await playAssault(p.eParts, G.you,  p.traceYou);
 }
 
 // One line per contributing unit, then one line per defender, so every point of
@@ -1362,9 +1477,10 @@ async function playClash(p){
 function assaultHTML(who, total, parts, trace){
   if(!parts.length && !trace.length) return '';
   const rows = parts.map(p=>{
-    const why = p.arced   ? `arcs over from lane ${p.from+1}`
+    const where = p.overhead ? ' — over the front' : '';
+    const why = (p.arced   ? `arcs over from lane ${p.from+1}`
               : p.wheeled ? `wheels in from lane ${p.from+1}`
-              : p.rank > 0 ? `${TYPE[p.type].name}, second rank` : TYPE[p.type].name;
+              : p.rank > 0 ? `${TYPE[p.type].name}, second rank` : TYPE[p.type].name) + where;
     const bon = p.bonus ? ` <span class="bon">+${p.bonus}</span>` : '';
     return `<div class="ln"><span class="nmx">${p.name}</span><span class="why">${why}</span><span class="num">▲${p.base}${bon}</span></div>`;
   }).join('');
@@ -1372,13 +1488,12 @@ function assaultHTML(who, total, parts, trace){
     const v = t.o==='eliminated' ? '<b class="elim">DESTROYED</b>'
             : t.o==='broken'     ? '<b class="rout">BREAKS</b>'
             : t.o==='wounded'    ? `<b class="rout">−${t.dmg}</b> <span class="held">✦${t.left} left</span>`
-            : t.o==='screened'   ? '<b class="held">RIDES CLEAR</b>'
                                  : '<b class="held">HOLDS</b>';
-    const why = t.o==='held' || t.o==='screened'
+    const why = t.o==='held'
       ? `${t.had} against ⬢${t.g}`
       : `${t.had} against ⬢${t.g}, through by ${t.dmg}`;
     return `<div class="ln"><span class="nmx">${t.c.n}</span>`
-         + `<span class="why">${why}${t.c.dugIn?' (dug in)':''}${t.c.screen?' (screening)':''}</span>`
+         + `<span class="why">${why}${isCharging(t.c)?' (charging)':''}</span>`
          + `<span class="num">${v}</span></div>`;
   }).join('');
   return `<div class="assault"><div class="ahead">${who} <b>▲${total}</b></div>${rows}`
@@ -1442,10 +1557,8 @@ function scoreMove(s, foe, card, L){
       const myStrike = laneStrike(s,L) + card.s;
       const foeFront = frontOf(foe, L);          // living front, not a corpse
       // reward wearing their front card down, and finishing it
-      if(foeFront && foeFront.screen){
-        v += myStrike * 0.10;                    // nothing to break — it rides clear
-      } else if(foeFront){
-        const fg = effGuard(foeFront);           // a braced line is harder to get through
+      if(foeFront){
+        const fg = effGuard(foeFront);
         if(myStrike < fg) v -= 1;
         else {
           const dmg = myStrike - fg;
@@ -1541,17 +1654,20 @@ function enemyChoose(){
 //
 // Nothing spills to the rank behind any more. You cannot reach past a card you
 // have not broken — the second rank is depth, and depth has to be chewed through.
-function computeDamage(stack, strike, trace){
-  const out = [], c = stack[0];
-  if(!c) return out;
+function computeDamage(c, strike, trace){
+  const out = [];
+  // No defender, or nobody aimed at this one: not an event. Recording it as a
+  // "hold" would put a line in the breakdown for a card nobody attacked, and it
+  // inflates any count of how often the line actually holds.
+  if(!c || strike <= 0) return out;
   const g = effGuard(c);
 
   if(strike < g){ if(trace) trace.push({c, o:'held', had:strike, g, dmg:0}); return out; }
 
-  // screening cavalry takes the blow and rides clear — it soaks the hit whole
-  if(c.screen){ if(trace) trace.push({c, o:'screened', had:strike, g, dmg:0}); return out; }
-
   const dmg = strike - g;
+  // Exactly matching the wall gets through it and does nothing. That is a hold,
+  // not a wound — reporting a 0-damage hit as "wounded" reads as a bug.
+  if(dmg === 0){ if(trace) trace.push({c, o:'held', had:strike, g, dmg:0}); return out; }
   const left = c.hp - dmg;
   // Overkill still converts a temporary loss into a permanent one, but it has to
   // be real overkill. "Past zero = destroyed" was ported straight from the
@@ -1571,8 +1687,6 @@ async function deployCard(lane, atFront){
   const card = G.you.hand.splice(sel,1)[0];
   sel = null;
   card.down = true;
-  if(canDigIn(card)) card.dugIn  = true;        // foot braces for the first clash
-  if(canScreen(card)) card.screen = true;       // horse screens it instead
   if(atFront) G.you.lanes[lane].unshift(card); else G.you.lanes[lane].push(card);
   G.deployed++;
 
@@ -1594,8 +1708,6 @@ async function revealDeployment(){
     const i = G.them.hand.indexOf(d.card);
     if(i >= 0) G.them.hand.splice(i, 1);
     d.card.down = true;
-    if(canDigIn(d.card))  d.card.dugIn  = true;
-    if(canScreen(d.card)) d.card.screen = true;
     if(d.back) G.them.lanes[d.L].push(d.card); else G.them.lanes[d.L].unshift(d.card);
   }
   say(`Both lines are set.`);
@@ -1662,6 +1774,7 @@ async function commitReserve(lane, atFront){
   // ── 3. orders ──
   // The board is yours until you say go. Point each unit at what it is hitting;
   // the enemy has already chosen theirs and cannot react to yours.
+  scriptStances(G.them, G.you);                // their stances are set before yours
   const theirAim = autoAim(G.them, G.you);
   busy = false;                                // the board must accept clicks
   await askOrders();
@@ -1673,16 +1786,25 @@ async function commitReserve(lane, atFront){
   const incThem  = buildAssault(G.you,  G.them, playerAim);
   const incYou   = buildAssault(G.them, G.you,  theirAim);
 
+  // Resolution is still presented lane by lane, but each RANK is resolved
+  // against its own incoming total. Nothing pools between them and nothing
+  // spills backwards — an archer shooting the second rank does not help the
+  // unit hitting the first.
   const plan = [];
   for(const L of LANE_IX){
     const traceThem = [], traceYou = [];
-    plan.push({ L,
-      pS: incThem[L].total, eS: incYou[L].total,
-      pParts: incThem[L].parts, eParts: incYou[L].parts,
-      traceThem, traceYou,
-      pFront: frontOf(G.you,L), eFront: frontOf(G.them,L),
-      toThem: computeDamage(living(G.them.lanes[L]), incThem[L].total, traceThem),
-      toYou:  computeDamage(living(G.you.lanes[L]),  incYou[L].total,  traceYou) });
+    const toThem = [], toYou = [];
+    let pS = 0, eS = 0, pParts = [], eParts = [];
+    for(const r of [0, 1]){
+      const t = TGT(L, r);
+      pS += incThem[t].total; eS += incYou[t].total;
+      pParts = pParts.concat(incThem[t].parts);
+      eParts = eParts.concat(incYou[t].parts);
+      toThem.push(...computeDamage(defenderAt(G.them, t), incThem[t].total, traceThem));
+      toYou .push(...computeDamage(defenderAt(G.you,  t), incYou[t].total,  traceYou));
+    }
+    plan.push({ L, pS, eS, pParts, eParts, traceThem, traceYou,
+                pFront: frontOf(G.you,L), eFront: frontOf(G.them,L), toThem, toYou });
   }
 
   // every lane where anything at all happens, including a lane that merely holds
@@ -1720,11 +1842,10 @@ async function commitReserve(lane, atFront){
     render();
   }
 
-  playerAim = {};                            // orders expire with the clash
-
-  // the line has taken a hit — it is no longer braced, and the horse is committed
-  if(G.wave === 2) [...G.you.lanes.flat(), ...G.them.lanes.flat()]
-    .forEach(c=>{ delete c.dugIn; delete c.screen; });
+  // orders and stances both expire with the clash — a charge is one clash of
+  // recklessness, not a mode you leave switched on
+  playerAim = {};
+  [...G.you.lanes.flat(), ...G.them.lanes.flat()].forEach(c=>delete c.stance);
 
   G.wave++;
   render();

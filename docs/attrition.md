@@ -400,3 +400,62 @@ per fight       12.2 held · 7.8 wounded · 3.9 broken · 1.8 destroyed
 Wounded now outnumbers broken, and broken outnumbers destroyed two to one. That
 ordering is the whole point of the rework: units get worn down, most survive
 being worn, and destruction is the exception rather than the default.
+
+
+---
+
+## 12. Targets are defenders, not lanes
+
+A target used to be a lane; the lane's whole incoming total landed on its front
+card. Now a target is a **specific defender** — which lane, and which rank —
+encoded as one integer (`TGT`, `tLane`, `tRank`, `defenderAt`).
+
+- **Melee** still goes through the front and only the front.
+- **Archers pick a rank.** Front or back, in any lane they can reach. Reach still
+  depends on the archer's own rank: from the front, its own lane (or a wheel if
+  that lane faces nothing); from the second rank, its own lane or either
+  neighbour.
+- Ranks accumulate **separately**. Fire aimed at the back rank does not help
+  whoever is hitting the front.
+
+Depth is no longer shelter. Putting an archer behind a shield wall keeps it out
+of reach of infantry and cavalry, but not out of reach of other archers.
+
+### No rollover — confirmed, not added
+
+Damage has not carried to the rank behind since step 1. `computeDamage` only
+ever touches the card it was aimed at. ▲12 into a front card with ✦3 left stops
+there; the ✦9 of excess is spent, not passed on.
+
+What the excess still does is decide **break vs destroy** through `OVERKILL` —
+a separate rule, still live.
+
+### Two counting bugs fixed
+
+Both in the same family as the earlier "the wall never holds" mistake — the
+harness counting something the code could not produce, or producing something
+that was not an event.
+
+- A hit that **exactly matched** the wall (Strike == Guard, 0 damage) was
+  recorded as `wounded`. It is a hold.
+- Resolving per rank meant `computeDamage` ran for ranks **nobody shot at**, and
+  each one logged a hold. It inflated holds from 8.6 to 31.0 a fight and would
+  have put "HOLDS" lines in the breakdown for cards under no attack. Zero
+  incoming is now not an event at all.
+
+### Making the choice real
+
+Scoring the back rank with a flat discount meant the AI shot over the front in
+**0.9%** of shots. A choice that is wrong 99 times in 100 is not a choice.
+
+What the evaluator was missing is that *what* is back there decides it: a
+second-rank archer is a live striker and killing it silences fire for the rest
+of the fight, while second-rank infantry is inert until it steps up. Scoring
+that difference (`+4` for an archer, `−3` otherwise) took overhead fire to
+**19.2% of archer shots**, and tightened the spread.
+
+```
+matchups     48–53%  (5pt spread)
+line holds   47.2%
+per fight    10.2 held · 5.7 wounded · 3.6 broken · 2.1 destroyed
+```
