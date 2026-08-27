@@ -71,12 +71,19 @@
   .c .st{display:flex;justify-content:space-between;gap:2px;font-size:12.5px;font-variant-numeric:tabular-nums}
   .c .st span{display:flex;align-items:center;gap:1px}
   .c .sv{color:var(--s)} .c .gv{color:var(--g)} .c .mv{color:var(--m)}
+  .c .hv{color:#c96f6f}
+  .c .st{font-size:11.5px}
   .c .mv.hurt{color:#e0a04a}
+  .c .hv.hurt{color:#e07070}
   .c .sv.up{color:#ff9d5c;font-weight:700}
   .c .gv.down{color:#7a8fa8}
   .stance{display:flex;align-items:center;gap:8px;margin-top:7px}
   .holdnote{font-size:10.5px;color:var(--faint);margin-top:5px;letter-spacing:.03em}
   .stance .scost{font-size:10.5px;color:var(--faint);letter-spacing:.04em}
+  .shk{color:#e0a04a;font-size:10px}
+  .mline{display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:1px 0}
+  .mline .why{color:var(--faint)}
+  .mline .num{color:var(--m)}
   .c .ofm{opacity:.5;font-size:10px;margin-left:0}
   .c .dug{color:var(--m);font-size:9px;vertical-align:1px;margin-left:1px}
   .c .ty{
@@ -664,13 +671,35 @@ const DEPLOY_N  = 4;      // opening line, at most two to any one lane
 // reserve is four near-identical decisions. Front-loading the second wave gives
 // the fight a shape — lay a line, answer their line in force, then trickle.
 const RESERVE_N = [3, 1, 1, 1];
-const CLASHES   = RESERVE_N.length;
-const WAVES     = 1 + CLASHES;
 const HAND_SIZE = DEPLOY_N + RESERVE_N.reduce((a,b)=>a+b, 0);
 // how many this clash wants; wave 2 is the first clash
-const reservesFor = w => RESERVE_N[w - 2] || 0;
-let OVERKILL    = 2;   // damage this many times the morale left destroys outright
+// There is no final clash any more, so the schedule trickles on: once it is
+// exhausted you commit one a clash until the hand is empty.
+const reservesFor = w => RESERVE_N[w - 2] ?? 1;
 const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
+
+// ── COHESION AND MORALE ──────────────────────────────────────────────────────
+// Blows land on ✚ Health. ✦ Morale falls from SITUATION — units do not break
+// because they were whittled down, they break because the men beside them ran.
+// OVERKILL is gone: it was an arbitrary multiplier bolted on because one pool
+// had to produce two outcomes, and two pools express it honestly.
+let MOR_NEIGHBOUR  = 1;   // a friendly unit next door broke this clash
+let MOR_BREACH     = 1;   // ...and it left that lane empty. A hole is worse.
+let MOR_OUTNUMBERED= 1;   // more of them than you in your own lane
+let MOR_HEAVY      = 1;   // a blow took half or more of the health you had left
+let MOR_FLOOR      = 2;   // a worn unit is fragile, never arriving on the brink
+
+let COH_START      = 30;  // an army's willingness to stand
+let COH_BREAK      = 1;   // one of yours broke
+let COH_DESTROY    = 2;   // one of yours was destroyed outright
+let COH_GROUND     = 0.5; // per point of bounty they hold over what you hold
+const FATIGUE = n => Math.floor(n / 3);   // rises as the battle drags, so it ends
+const MAX_CLASHES  = 24;  // a backstop, not a rule — fatigue should end it first
+
+// A worn unit is fragile, not feeble: fewer bodies means less staying power, but
+// the survivors fight exactly as hard. Scaling Strike or Guard here would be the
+// death spiral the uncapped scatter penalty already taught us to avoid.
+const startMorale = c => Math.max(MOR_FLOOR, Math.round(c.m * (c.hp / c.h)));
 
 // ── STANCES ──────────────────────────────────────────────────────────────────
 // The first ability, and the thing that gives cavalry an identity again. With
@@ -708,39 +737,44 @@ const effGuard   = c => Math.max(1, c.g - (isCharging(c) ? CHARGE_G : 0));
 //                            nothing finishes them. A mob you have to chip down.
 //   HUMANS   ⬢4–6 · ✦4–7    middle on both, and the highest Strike band —
 //                            they pay for their armour with reach, not staying power.
+// ✚ Health is the damage pool and carries the old single-pool values, so the
+// damage model is unchanged by the split. ✦ Morale is the new axis: the will to
+// stand, reset every battle. Set by ROLE for now, not by faction — the faction
+// spread is deliberately last, as it has been in every retune.
+//   standards and heavy foot  steady          cavalry  flighty
 const FACTIONS = {
   HUMANS:{ name:'HUMANS', base:0, col:'#7f9fd0', tag:'H',
     blurb:'Every arm, and an edge in none. They come straight at you.', deck:[
-    {n:'KNIGHTS',      t:'cav', s:7, g:4, m:4},
-    {n:'OUTRIDERS',    t:'cav', s:6, g:4, m:4},
-    {n:'SWORDSMEN',    t:'inf', s:5, g:4, m:5},
-    {n:'LONGBOWS',     t:'arc', s:5, g:4, m:5},
-    {n:'CROSSBOWS',    t:'arc', s:3, g:5, m:5},
-    {n:'HALBERDIERS',  t:'inf', s:4, g:5, m:5},
-    {n:'SPEARMEN',     t:'inf', s:3, g:6, m:6},
-    {n:'THE BANNER',   t:'inf', s:1, g:6, m:7},
+    {n:'KNIGHTS',      t:'cav', s:7, g:4, h:10,  m:3},
+    {n:'OUTRIDERS',    t:'cav', s:6, g:4, h:10,  m:3},
+    {n:'SWORDSMEN',    t:'inf', s:5, g:4, h:12,  m:4},
+    {n:'LONGBOWS',     t:'arc', s:5, g:4, h:12,  m:3},
+    {n:'CROSSBOWS',    t:'arc', s:3, g:5, h:12,  m:3},
+    {n:'HALBERDIERS',  t:'inf', s:4, g:5, h:12,  m:4},
+    {n:'SPEARMEN',     t:'inf', s:3, g:6, h:15,  m:5},
+    {n:'THE BANNER',   t:'inf', s:1, g:6, h:18,  m:7},
   ]},
   GOBLINS:{ name:'GOBLINS', base:0, col:'#8fc46a', tag:'G',
     blurb:'Half of them mounted. They go round your line, not through it.', deck:[
-    {n:'WOLF RIDERS',  t:'cav', s:7, g:3, m:7},
-    {n:'SPIDER RIDERS',t:'cav', s:6, g:3, m:7},
-    {n:'LANCERS',      t:'cav', s:5, g:3, m:8},
-    {n:'RAIDERS',      t:'cav', s:4, g:4, m:8},
-    {n:'SHORTBOWS',    t:'arc', s:4, g:3, m:8},
-    {n:'FANATICS',     t:'inf', s:6, g:3, m:8},
-    {n:'SPEAR MOB',    t:'inf', s:2, g:4, m:9},
-    {n:'THE IDOL',     t:'inf', s:1, g:5, m:10},
+    {n:'WOLF RIDERS',  t:'cav', s:7, g:3, h:18,  m:2},
+    {n:'SPIDER RIDERS',t:'cav', s:6, g:3, h:18,  m:2},
+    {n:'LANCERS',      t:'cav', s:5, g:3, h:20,  m:3},
+    {n:'RAIDERS',      t:'cav', s:4, g:4, h:20,  m:3},
+    {n:'SHORTBOWS',    t:'arc', s:4, g:3, h:20,  m:2},
+    {n:'FANATICS',     t:'inf', s:6, g:3, h:20,  m:6},
+    {n:'SPEAR MOB',    t:'inf', s:2, g:4, h:22,  m:3},
+    {n:'THE IDOL',     t:'inf', s:1, g:5, h:25, m:7},
   ]},
   DWARVES:{ name:'DWARVES', base:0, col:'#d9a05b', tag:'D',
     blurb:'No horse in the hold. They stack deep and refuse to move.', deck:[
-    {n:'HAMMERERS',    t:'inf', s:5, g:5, m:4},
-    {n:'CROSSBOWS',    t:'arc', s:5, g:5, m:4},
-    {n:'MINERS',       t:'inf', s:4, g:5, m:5},
-    {n:'IRONBREAKERS', t:'inf', s:3, g:6, m:5},
-    {n:'THUNDERERS',   t:'arc', s:3, g:5, m:5},
-    {n:'LONGBEARDS',   t:'inf', s:4, g:6, m:5},
-    {n:'SHIELD WALL',  t:'inf', s:2, g:7, m:6},
-    {n:'THE ANVIL',    t:'inf', s:1, g:7, m:7},
+    {n:'HAMMERERS',    t:'inf', s:5, g:5, h:10,  m:5},
+    {n:'CROSSBOWS',    t:'arc', s:5, g:5, h:10,  m:4},
+    {n:'MINERS',       t:'inf', s:4, g:5, h:12,  m:4},
+    {n:'IRONBREAKERS', t:'inf', s:3, g:6, h:12,  m:6},
+    {n:'THUNDERERS',   t:'arc', s:3, g:5, h:12,  m:4},
+    {n:'LONGBEARDS',   t:'inf', s:4, g:6, h:12,  m:6},
+    {n:'SHIELD WALL',  t:'inf', s:2, g:7, h:15,  m:7},
+    {n:'THE ANVIL',    t:'inf', s:1, g:7, h:18,  m:8},
   ]},
 };
 // Each deck is two copies of every card. Eight cards a fight out of twelve was
@@ -769,7 +803,8 @@ function assertDecks(){
       bad.push(`${k} deck of ${f.deck.length*COPIES} cannot field a hand of ${HAND_SIZE}`);
     for(const c of f.deck){
       if(c.g < 3 || c.g > 7) bad.push(`${k}/${c.n} guard ${c.g} outside 3-7`);
-      if(c.m < 2)            bad.push(`${k}/${c.n} morale ${c.m} — nothing survives a hit`);
+      if(c.h < 2)            bad.push(`${k}/${c.n} health ${c.h} — nothing survives a hit`);
+      if(c.m < 1)            bad.push(`${k}/${c.n} morale ${c.m} — breaks on sight`);
       if(!TYPE[c.t])         bad.push(`${k}/${c.n} has no unit type`);
     }
   }
@@ -888,9 +923,10 @@ let uid = 0;
 function mkSide(src){
   return {
     name: src.name, base: src.base,
-    // hp is current morale — the pool that gets worn down. m stays as the
-    // printed maximum, so a card can be shown as 3/7 and rally to full.
-    deck: Array.from({length:COPIES}, ()=>src.deck).flat().map(c=>({...c, id:++uid, hp:c.m})),
+    // hp is current HEALTH and persists across the run; mp is current MORALE and
+    // is reset every battle. h and m stay as the printed maximums.
+    deck: Array.from({length:COPIES}, ()=>src.deck).flat().map(c=>({...c, id:++uid, hp:c.h, mp:c.m})),
+    coh: COH_START,
     hand: [],
     lanes: emptyLanes(),   // index 0 of each lane === FRONT
     fallen: [],          // routed this fight
@@ -944,7 +980,10 @@ function beginFight(enc){
   // wounds should instead persist up the ladder is open question 5 in the spec —
   // it is the obvious place to find the run its missing spine, and also a large
   // difficulty multiplier, so it waits until the fight itself is tuned.
-  you.deck.forEach(c=>{ c.hp = c.m; delete c.dead; delete c._tag; });
+  // ✦ Morale resets every battle — fresh resolve. ✚ Health does NOT: bodies do
+  // not come back, and that is the only place run attrition is felt.
+  you.deck.forEach(c=>{ c.mp = startMorale(c); delete c.dead; delete c._tag; delete c.counted; });
+  you.coh = COH_START;
   you.deck = shuffle(you.deck);
   you.hand = you.deck.slice(0, Math.min(HAND_SIZE, you.deck.length));
 
@@ -954,6 +993,8 @@ function beginFight(enc){
   G.them.base  = enc.base;
   G.them.title = enc.title;
   G.them.deck  = shuffle(G.them.deck);
+  G.them.deck.forEach(c=>{ c.mp = startMorale(c); });
+  G.them.coh   = COH_START;
   G.them.hand  = G.them.deck.slice(0, HAND_SIZE);
 
   G.wave = 1; G.over = false; sel = null; busy = false;
@@ -987,7 +1028,7 @@ function cardHTML(c, who, isFront, isFighting){
   return `<div class="${cls}" data-id="${c.id}">
     <div class="nm"><span class="ty t-${c.t}">${TYPE[c.t].label}</span>${c.n}</div>
     <div class="st">
-      <span class="sv ${isFighting===false?'idle':''} ${isCharging(c)?'up':''}">▲${effStrike(c)}</span><span class="gv ${isCharging(c)?'down':''}">⬢${effGuard(c)}${isCharging(c)?`<span class="dug" title="charging">⇈</span>`:''}</span><span class="mv ${c.hp < c.m ? 'hurt' : ''}">✦${c.hp}${c.hp < c.m ? `<span class="ofm">/${c.m}</span>` : ''}</span>
+      <span class="sv ${isFighting===false?'idle':''} ${isCharging(c)?'up':''}">▲${effStrike(c)}</span><span class="gv ${isCharging(c)?'down':''}">⬢${effGuard(c)}${isCharging(c)?`<span class="dug" title="charging">⇈</span>`:''}</span><span class="hv ${c.hp < c.h ? 'hurt' : ''}">✚${c.hp}${c.hp < c.h ? `<span class="ofm">/${c.h}</span>` : ''}</span><span class="mv ${c.mp < c.m ? 'hurt' : ''}">✦${c.mp}</span>
     </div>${fate}
   </div>`;
 }
@@ -1006,6 +1047,8 @@ function laneCount(side, i){ return living(side.lanes[i]).length; }
 // can be broken off the field entirely before the clashes run out.
 const swept = () => LANE_IX.every(L=>!living(G.you.lanes[L]).length)
                  || LANE_IX.every(L=>!living(G.them.lanes[L]).length);
+// An army whose cohesion fails routs, and the battle ends there.
+const routed = () => G.you.coh <= 0 || G.them.coh <= 0;
 // Only the front rank swings — except archers, who shoot from anywhere in the
 // lane. That is what makes a second unit DEPTH (a replacement) rather than
 // simply more damage, and what makes archers-behind-infantry the natural formation.
@@ -1214,8 +1257,11 @@ function autoAim(att, def){
       else {
         const dmg = power - g;
         v += Math.min(dmg, d.hp) * 1.6;
-        if(dmg >= d.hp) v += 7;                          // it comes off the lane
-        if(dmg >  d.hp) v += 3;                          // and never comes back
+        // destroying it takes it off the lane, costs them cohesion, and shakes
+        // whatever is standing next to it — worth well more than the damage
+        if(dmg >= d.hp) v += 9;
+        // a blow that takes half of what is left shakes it even if it survives
+        else if(dmg * 2 >= d.hp) v += 2;
       }
       // Shooting over the front rank does not open the lane, so as a way to take
       // ground it is worth less than hitting the front. What makes it worth
@@ -1244,7 +1290,7 @@ function threatLabel(incoming, d){
   if(incoming < g) return `<span class="thr-hold">▲${incoming} vs ⬢${g} · holds</span>`;
   const dmg = incoming - g;
   const cls = dmg >= d.hp ? 'thr-elim' : 'thr-rout';
-  const what = dmg >= d.hp * OVERKILL ? 'destroys' : dmg >= d.hp ? 'breaks' : `−${dmg} of ${d.hp}`;
+  const what = dmg >= d.hp ? 'destroys' : `−${dmg} of ✚${d.hp}`;
   return `<span class="${cls}">▲${incoming} vs ⬢${g} · ${what}</span>`;
 }
 // Ranks are aimed at separately now, so the number that matters sits on the
@@ -1263,12 +1309,12 @@ function render(){
   const rungLabel = run && run.current
     ? (run.current.isBoss ? 'BOSS' : `rung ${run.rung+1}/3`)
     : 'rung 1/3';
-  const phaseLabel = G.phase === 'deploy' ? 'deploying' : `clash ${Math.min(G.wave,WAVES)-1}/${CLASHES}`;
+  const phaseLabel = G.phase === 'deploy' ? 'deploying' : `clash ${G.wave-1}`;
   $('#meta').textContent = `${rungLabel} · ${phaseLabel}`;
   $('#eName').textContent = G.them.name;
-  $('#eBase').textContent = G.them.base;
+  $('#eBase').textContent = Math.max(0, Math.round(G.them.coh));
   $('#pName').textContent = G.you.name;
-  $('#pBase').textContent = G.you.base;
+  $('#pBase').textContent = Math.max(0, Math.round(G.you.coh));
   $('#deckInfo').textContent = `deck ${G.you.deck.length}`;
 
   // projected assaults as the board currently stands — face-down reserves are
@@ -1624,9 +1670,9 @@ function assaultHTML(who, total, parts, trace){
     return `<div class="ln"><span class="nmx">${p.name}</span><span class="why">${why}</span><span class="num">▲${p.base}${bon}</span></div>`;
   }).join('');
   const res = trace.map(t=>{
-    const v = t.o==='eliminated' ? '<b class="elim">DESTROYED</b>'
-            : t.o==='broken'     ? '<b class="rout">BREAKS</b>'
-            : t.o==='wounded'    ? `<b class="rout">−${t.dmg}</b> <span class="held">✦${t.left} left</span>`
+    const v = t.o==='destroyed' ? '<b class="elim">DESTROYED</b>'
+            : t.o==='wounded'    ? `<b class="rout">−${t.dmg}</b> <span class="held">✚${t.left} left</span>`
+                                   + (t.heavy ? ` <span class="shk">shaken</span>` : '')
                                  : '<b class="held">HOLDS</b>';
     const why = t.o==='held'
       ? `${t.had} against ⬢${t.g}`
@@ -1702,7 +1748,7 @@ function scoreMove(s, foe, card, L){
         else {
           const dmg = myStrike - fg;
           v += Math.min(dmg, foeFront.hp) * 1.2;
-          if(dmg >= foeFront.hp) v += 6;
+          if(dmg >= foeFront.hp) v += 8;
         }
       }
       // reward holding the ground — bodies standing, not morale, is what scores
@@ -1712,8 +1758,8 @@ function scoreMove(s, foe, card, L){
       const threat = laneStrike(foe,L);
       if(threat >= card.g){
         const incoming = threat - card.g;
-        v -= Math.min(incoming, card.m) * 1.0;
-        if(incoming >= card.m) v -= 5;           // it will not survive to hold anything
+        v -= Math.min(incoming, card.h) * 1.0;
+        if(incoming >= card.h) v -= 6;           // it will not survive to hold anything
       }
       // ── faction posture ──
       v += P.mass * MASS_W * living(s.lanes[L]).length;      // concentrate / fan out
@@ -1795,29 +1841,24 @@ function enemyChoose(){
 // have not broken — the second rank is depth, and depth has to be chewed through.
 function computeDamage(c, strike, trace){
   const out = [];
-  // No defender, or nobody aimed at this one: not an event. Recording it as a
-  // "hold" would put a line in the breakdown for a card nobody attacked, and it
-  // inflates any count of how often the line actually holds.
+  // No defender, or nobody aimed at this one: not an event.
   if(!c || strike <= 0) return out;
   const g = effGuard(c);
 
   if(strike < g){ if(trace) trace.push({c, o:'held', had:strike, g, dmg:0}); return out; }
 
   const dmg = strike - g;
-  // Exactly matching the wall gets through it and does nothing. That is a hold,
-  // not a wound — reporting a 0-damage hit as "wounded" reads as a bug.
+  // Exactly matching the wall gets through it and does nothing. That is a hold.
   if(dmg === 0){ if(trace) trace.push({c, o:'held', had:strike, g, dmg:0}); return out; }
+
   const left = c.hp - dmg;
-  // Overkill still converts a temporary loss into a permanent one, but it has to
-  // be real overkill. "Past zero = destroyed" was ported straight from the
-  // threshold game and does not survive continuous damage: landing exactly on
-  // zero is a coincidence, so it made destruction the default — measured at 5.5
-  // destroyed a fight against 1.2 broken. Doubling what was needed is the same
-  // idea the old Strike ≥ 2×Guard rule expressed, and it keeps finishing off a
-  // nearly-dead unit as the thing that puts it in the ground for good.
-  const o = left > 0 ? 'wounded' : dmg >= c.hp * OVERKILL ? 'eliminated' : 'broken';
-  if(trace) trace.push({c, o, had:strike, g, dmg, left:Math.max(0,left)});
-  out.push({ c, o, dmg });
+  // Blows kill. They do not break — breaking is a morale event, resolved after
+  // all damage is in, because a unit breaks from what happened around it.
+  const o = left > 0 ? 'wounded' : 'destroyed';
+  // A blow that takes half or more of what you had left shakes you.
+  const heavy = dmg * 2 >= c.hp;
+  if(trace) trace.push({c, o, had:strike, g, dmg, left:Math.max(0,left), heavy});
+  out.push({ c, o, dmg, heavy });
   return out;
 }
 
@@ -2057,6 +2098,27 @@ async function resolveClash(){
     render();
   }
 
+  // ── the morale phase: who breaks, and why ──
+  // After every blow has landed, because a unit breaks from what happened
+  // AROUND it, not from what hit it. Both sides read the same board state.
+  const brokeYou  = moralePhase(G.you,  G.them);
+  const brokeThem = moralePhase(G.them, G.you);
+  if(brokeYou.length || brokeThem.length){
+    for(const {c} of [...brokeYou, ...brokeThem]) markTag(c, 'broken');
+    render(); paintTags();
+    const who = [...brokeThem.map(x=>`<b class="tv">${x.c.n}</b>`),
+                 ...brokeYou .map(x=>`<b class="yv">${x.c.n}</b>`)].join(', ');
+    say(`<div class="clashhead">THE LINE WAVERS</div>${who} break${brokeYou.length+brokeThem.length>1?'':'s'} and run.`);
+    shake();
+    await wait(Math.min(1500, 700 + (brokeYou.length+brokeThem.length)*200));
+    for(const {c} of [...brokeYou, ...brokeThem]) delete c._tag;
+  }
+
+  // ── fatigue and ground ──
+  const fat = FATIGUE(G.wave - 1);
+  G.you.coh  -= fat + groundDrain(G.you,  G.them);
+  G.them.coh -= fat + groundDrain(G.them, G.you);
+
   // ── marches resolve LAST, after everything has taken its damage ──
   // Order matters: a unit fights nowhere, is struck where it stood, and only
   // then relocates. Doing it before the blows would let a front unit step aside
@@ -2071,7 +2133,10 @@ async function resolveClash(){
   G.wave++;
   render();
 
-  if(G.wave > WAVES || swept()){ await wait(350); finish(); }
+  // No turn limit any more: the battle runs until an army's cohesion fails.
+  // MAX_CLASHES is a backstop against a bug, not a rule — fatigue should always
+  // get there first.
+  if(routed() || swept() || G.wave > MAX_CLASHES){ await wait(350); finish(); }
   else {
     busy = false;
     // keep the tally on screen while they decide — appended, not replaced
@@ -2130,48 +2195,107 @@ function findCard(id){
   return null;
 }
 function applyOutcomes(side, L, outs){
-  for(const {c,o,dmg} of outs){
+  for(const {c,o,dmg,heavy} of outs){
     c.hp = Math.max(0, c.hp - dmg);
-    if(o === 'wounded'){ delete c._tag; continue; }   // still standing, still holding the lane
-    c.dead = o;                                       // stays on the board, inert
+    if(heavy) c.shaken = (c.shaken || 0) + MOR_HEAVY;   // resolved in the morale phase
+    if(o === 'wounded'){ delete c._tag; continue; }
+    c.dead = 'destroyed';                              // stays on the board, inert
     side.deck = side.deck.filter(x=>x.id!==c.id);
+    side.coh -= COH_DESTROY;
     delete c._tag;
-    if(o === 'broken') side.fallen.push(c);           // rallies for the next fight
-    // eliminated: gone for good
   }
+}
+
+// ── THE MORALE PHASE ─────────────────────────────────────────────────────────
+// Runs once, after ALL damage is in, and reads the board as it stood before any
+// of this clash's breaks. That single-pass reading is what stops cascade running
+// away: a break can shake its neighbours, but the units THEY shake do not break
+// in the same clash. Collapse is still non-linear across clashes — it just
+// cannot unzip a whole line in one.
+function moralePhase(side, foe){
+  const broke = [];
+  // 1. gather what each unit is feeling, from the board as it stands now
+  const shock = new Map();
+  const add = (c, n) => shock.set(c.id, (shock.get(c.id) || 0) + n);
+  for(const L of LANE_IX){
+    const mine = living(side.lanes[L]), theirs = living(foe.lanes[L]);
+    for(const c of mine){
+      if(c.shaken) add(c, c.shaken);                              // a heavy blow
+      if(theirs.length > mine.length) add(c, MOR_OUTNUMBERED);    // outnumbered here
+    }
+  }
+  // 2. anything destroyed this clash rattles the lanes either side of it, and
+  //    rattles them harder if the lane it held is now empty
+  for(const L of LANE_IX){
+    const lost = side.lanes[L].filter(c=>c.dead && !c.counted);
+    if(!lost.length) continue;
+    lost.forEach(c=>{ c.counted = true; });
+    const emptied = living(side.lanes[L]).length === 0;
+    for(const t of adjacent(L))
+      for(const n of living(side.lanes[t]))
+        add(n, MOR_NEIGHBOUR + (emptied ? MOR_BREACH : 0));
+  }
+  // 3. apply it
+  for(const L of LANE_IX)
+    for(const c of living(side.lanes[L]).slice()){
+      delete c.shaken;
+      const n = shock.get(c.id) || 0;
+      if(!n) continue;
+      c.mp -= n;
+      c.lostMorale = n;                       // for the breakdown
+      if(c.mp <= 0){
+        c.mp = 0;
+        c.dead = 'broken';                    // off the field, back next battle
+        side.coh -= COH_BREAK;
+        side.fallen.push(c);
+        side.deck = side.deck.filter(x=>x.id!==c.id);
+        broke.push({ c, L });
+      }
+    }
+  return broke;
+}
+
+// Ground you do not hold bleeds you. This is what keeps lanes worth contesting
+// every clash instead of only on the last one.
+function groundDrain(side, foe){
+  let mine = 0, theirs = 0;
+  for(const L of LANE_IX){
+    const a = living(side.lanes[L]).length, b = living(foe.lanes[L]).length;
+    if(a > b) mine += LANE_BOUNTY[L]; else if(b > a) theirs += LANE_BOUNTY[L];
+  }
+  return Math.max(0, theirs - mine) * COH_GROUND;
 }
 
 // ═══════════════════════════════════════════════ SCORING
 function finish(){
   G.over = true; busy = true;
-  // You win on GROUND, not on bodies. A lane goes to whoever has more of them
-  // still standing on it — and a unit at 1 morale is a whole body, so a battered
-  // line still holds. The only way to take a lane is to break them off it.
-  // Contested lanes have to resolve to someone: if a contested lane paid nobody,
-  // both sides would be paid to avoid contact, and we would have built a longer
-  // battle system while making fighting the wrong move.
+  // You win by NOT BREAKING. That is the whole scoring rule now — no counting
+  // at the end. Ground still decided the fight, but it did so continuously,
+  // by bleeding the side that did not hold it.
   const rows = [];
-  let yTot = 0, tTot = 0, detail = [];
+  const yc = Math.max(0, Math.round(G.you.coh)), tc = Math.max(0, Math.round(G.them.coh));
+  rows.push(['Cohesion remaining', yc, tc]);
+  let yg = 0, tg = 0;
   for(const L of LANE_IX){
-    const yc = living(G.you.lanes[L]).length, tc = living(G.them.lanes[L]).length;
-    if(yc > tc){ yTot += LANE_BOUNTY[L]; detail.push(`L${L+1}→you`); }
-    else if(tc > yc){ tTot += LANE_BOUNTY[L]; detail.push(`L${L+1}→them`); }
-    else detail.push(`L${L+1}→${yc ? 'tie' : 'empty'}`);
-    rows.push([`Lane ${L+1} (bounty ${LANE_BOUNTY[L]}) — ${yc} v ${tc} standing`,
-               yc > tc ? LANE_BOUNTY[L] : 0, tc > yc ? LANE_BOUNTY[L] : 0]);
+    const a = living(G.you.lanes[L]).length, b = living(G.them.lanes[L]).length;
+    if(a > b) yg += LANE_BOUNTY[L]; else if(b > a) tg += LANE_BOUNTY[L];
   }
+  rows.push(['Ground held at the end', yg, tg]);
+  rows.push(['Units still standing',
+    LANE_IX.reduce((t,L)=>t+living(G.you.lanes[L]).length,0),
+    LANE_IX.reduce((t,L)=>t+living(G.them.lanes[L]).length,0)]);
 
-  // tiebreak: ground, then bodies left on the field, then the defender holds
   let tieNote = '';
   let won;
-  if(yTot !== tTot) won = yTot > tTot;
-  else {
-    const yc = LANE_IX.reduce((t,L)=>t+living(G.you.lanes[L]).length,0);
-    const tc = LANE_IX.reduce((t,L)=>t+living(G.them.lanes[L]).length,0);
-    won = yc > tc;
-    tieNote = yc===tc
-      ? ' · ground and bodies tied — the defender holds'
-      : ` · ground tied, broken on units standing (${yc} v ${tc})`;
+  if(G.them.coh <= 0 && G.you.coh > 0){ won = true;  tieNote = ' · their line broke'; }
+  else if(G.you.coh <= 0 && G.them.coh > 0){ won = false; tieNote = ' · your line broke'; }
+  else if(G.you.coh !== G.them.coh){
+    // ran out of field or hit the backstop — the steadier army carries it
+    won = G.you.coh > G.them.coh;
+    tieNote = ' · neither broke, decided on cohesion';
+  } else {
+    won = yg > tg;
+    tieNote = yg === tg ? ' · dead level — the defender holds' : ' · cohesion level, decided on ground';
   }
 
   const routedNow = G.you.fallen.length;
