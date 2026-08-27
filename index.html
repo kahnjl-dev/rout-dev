@@ -334,6 +334,11 @@
   }
   /* anything of theirs the selected unit cannot reach steps back */
   .c.them.unreachable{opacity:.38}
+  .c.marching{box-shadow:0 0 0 1px #6fb0d8, 0 0 10px rgba(111,176,216,.35)}
+  .c .marchtag{
+    position:absolute;top:-6px;left:-4px;font-size:9.5px;padding:0 3px;
+    border-radius:3px;background:#0d0f13;border:1px solid #37546b;color:#8ec6e8;
+  }
   .c .ctag{
     position:absolute;top:-6px;right:-4px;font-size:9.5px;padding:0 3px;
     border-radius:3px;background:#0d0f13;border:1px solid var(--line);
@@ -901,7 +906,7 @@ let pendingLane   = -1;      // lane waiting on a front/behind answer, or -1
 // the reveal and the blows there is a phase where you point each of your units
 // at what it is going to hit, and nothing happens until you say so.
 let aiming     = null;    // {resolve} while the player is aiming, else null
-let playerAim  = {};      // {cardId: targetLane} — the player's orders
+let playerAim  = {};      // {cardId: target} — who each unit strikes
 let aimSel     = null;    // card id currently being aimed, or null
 
 let playerFaction = 'HUMANS';
@@ -1069,6 +1074,37 @@ function legalTargets(att, def, c, L, ix){
 // state. A unit hits for what it hits for, plus whatever stance it was given.
 const aimBonus = () => 0;
 
+// ── MARCHING ─────────────────────────────────────────────────────────────────
+// A unit could previously be stranded for good: a knight alone in lane 1 with
+// the battle in lanes 3-5 had nothing to strike and no way to reach anything,
+// and a melee unit stuck in a second rank was inert until whatever was in front
+// of it died. Both were dead cards you had paid for.
+//
+// So a unit may MARCH one lane instead of striking. The rules that make it a
+// cost rather than free repositioning:
+//
+//   ±1 only        crossing the field takes several clashes — the same reach
+//                  every other sideways rule in the game uses
+//   room required  the destination needs a free slot
+//   no strike      a marching unit does not fight this clash. For a stranded or
+//                  buried unit that is free, because it was contributing
+//                  nothing anyway — which is exactly the case worth fixing
+//   moves LAST     it takes whatever damage lands where it stands and only then
+//                  relocates. Marching first would let a front unit step aside
+//                  and make the enemy's blind-aimed blow evaporate, which is a
+//                  dodge nobody paid for
+const marchTargets = (side, L) =>
+  adjacent(L).filter(t => present(side.lanes[t]).length < LANE_CAP);
+function marchersOf(side){
+  const out = [];
+  for(const L of LANE_IX)
+    living(side.lanes[L]).forEach((c, ix)=>{
+      const opts = marchTargets(side, L);
+      if(opts.length) out.push({ c, L, ix, opts });
+    });
+  return out;
+}
+
 // Every unit that can strike and has somewhere to send it.
 function strikersOf(att, def){
   const out = [];
@@ -1086,6 +1122,7 @@ function strikersOf(att, def){
 function buildAssault(att, def, aim){
   const inc = Array.from({length: LANES * 2}, ()=>({ total:0, parts:[] }));
   for(const { c, L, ix } of strikersOf(att, def)){
+    if(c.marching !== undefined) continue;      // it is walking, not fighting
     const t = aim[c.id];
     if(t === undefined || t === null) continue;
     inc[t].total += effStrike(c);
@@ -1132,6 +1169,30 @@ function scriptStances(att, def){
       if(!foe) return;
       const g = effGuard(foe);
       if(c.s + CHARGE_S - g >= foe.hp && c.s - g < foe.hp) c.stance = 'charge';
+    });
+}
+
+// Scripted, like stances: a unit with nothing to strike walks toward the
+// nearest lane that has an enemy in it. Nothing clever — legible, and it stops
+// the AI stranding its own units in the corner exactly the way the player was.
+function scriptMarch(att, def){
+  for(const L of LANE_IX)
+    living(att.lanes[L]).forEach((c, ix)=>{
+      delete c.marching;
+      if(legalTargets(att, def, c, L, ix).length) return;   // it has a fight here
+      const opts = marchTargets(att, L);
+      if(!opts.length) return;
+      // how far to the nearest enemy from a given lane
+      const distFrom = t => {
+        let best = LANES;
+        for(const x of LANE_IX)
+          if(living(def.lanes[x]).length) best = Math.min(best, Math.abs(x - t));
+        return best;
+      };
+      const here = distFrom(L);
+      let bestT = null, bestD = here;
+      for(const t of opts){ const d = distFrom(t); if(d < bestD){ bestD = d; bestT = t; } }
+      if(bestT !== null) c.marching = bestT;
     });
 }
 
@@ -1219,6 +1280,11 @@ function render(){
 
   // which of your units still need orders, and what the selected one may hit
   const strikers  = aiming ? strikersOf(G.you, G.them) : [];
+  // A stranded unit can strike nothing, so it never appeared here and could not
+  // be clicked at all. Anything that can march is selectable too.
+  const orderable = aiming
+    ? [...strikers, ...marchersOf(G.you).filter(m=>!strikers.some(s=>s.c.id === m.c.id))]
+    : [];
   const selStriker = aiming && aimSel !== null ? strikers.find(s=>s.c.id === aimSel) : null;
   const openTgts   = selStriker ? selStriker.opts : [];
 
@@ -1285,12 +1351,13 @@ function render(){
         el.classList.add('targetable');
         el.onclick = ev=>{ ev.stopPropagation(); aimAt(t); };
       });
-    for(const s of strikers){
+    for(const s of orderable){
       const el = cardEl(s.c);
       if(!el) continue;
       el.classList.add('aimable');
       if(s.c.id === aimSel) el.classList.add('aimsel');
-      if(s.opts.length === 1) el.classList.add('aimlocked');
+      if(s.c.marching !== undefined) el.classList.add('marching');
+      else if(s.opts.length === 1) el.classList.add('aimlocked');
       el.onclick = ev=>{
         ev.stopPropagation();
         // Always SELECT — never toggle off. askOrders() pre-selects the first
@@ -1425,10 +1492,13 @@ function aimLane(L){
 // no decision in it. Everything else waits on an order.
 function seedAim(){
   playerAim = {};
+  [...G.you.lanes.flat(), ...G.them.lanes.flat()].forEach(c=>delete c.marching);
   for(const { c, opts } of strikersOf(G.you, G.them))
     if(opts.length === 1) playerAim[c.id] = opts[0];
 }
-const unaimed = () => strikersOf(G.you, G.them).filter(s=>playerAim[s.c.id] === undefined);
+// a unit under march orders is not waiting on a target
+const unaimed = () => strikersOf(G.you, G.them)
+  .filter(s=>playerAim[s.c.id] === undefined && s.c.marching === undefined);
 
 // The stance control only appears when a unit that can take one is selected —
 // which today means cavalry. It sits in the same panel as the orders text, so
@@ -1453,6 +1523,33 @@ function wireStance(){
   };
 }
 
+// Where the selected unit may march. Offered for ANY living unit with somewhere
+// to go — including one that has no legal target at all, which is the stranded
+// case this exists for and the one place the orders panel used to say nothing.
+function marchBtn(){
+  if(aimSel === null) return '';
+  const m = marchersOf(G.you).find(x=>x.c.id === aimSel);
+  if(!m) return '';
+  const going = m.c.marching;
+  const btns = m.opts.map(t=>
+    `<button class="btn ${going===t?'p':''} mv" data-to="${t}">`
+    + `${t < m.L ? '← LANE '+(t+1) : 'LANE '+(t+1)+' →'}</button>`).join('');
+  return `<div class="stance">${btns}`
+    + `<span class="scost">${going!==undefined ? 'marching — it will not strike' : 'march instead of striking'}</span></div>`;
+}
+function wireMarch(){
+  document.querySelectorAll('.btn.mv').forEach(b=>{
+    b.onclick = ()=>{
+      const c = [...G.you.lanes.flat()].find(x=>x.id === aimSel);
+      if(!c) return;
+      const to = +b.dataset.to;
+      if(c.marching === to) delete c.marching;
+      else { c.marching = to; delete playerAim[c.id]; }
+      sayAim(); render();
+    };
+  });
+}
+
 function sayAim(){
   const left = unaimed().length;
   const body = !strikersOf(G.you, G.them).length
@@ -1461,8 +1558,9 @@ function sayAim(){
       ? `Tap one of yours, then tap the <b>enemy unit</b> it strikes — front or back rank. `
         + `<b>${left}</b> still ${left===1?'has':'have'} no orders.`
       : `Every unit has its orders. Tap any of yours to re-aim it, or send them in.`;
-  say(`<div class="clashhead">GIVE THE ORDER</div>${body}${stanceBtn()}${clashBtn()}`);
+  say(`<div class="clashhead">GIVE THE ORDER</div>${body}${stanceBtn()}${marchBtn()}${clashBtn()}`);
   wireStance();
+  wireMarch();
   wireClash();
 }
 const clashBtn = () =>
@@ -1869,9 +1967,14 @@ async function resolveClash(){
     if(foeBack) G.them.lanes[pick.L].push(foeCard); else G.them.lanes[pick.L].unshift(foeCard);
     theirs.push(foeCard);
   }
-  if(!theirs.length && !mine.length){ busy = false; render(); return; }
-
-  say(`Clash ${G.wave-1} — both committed. Neither of you can see the other.`);
+  // A clash with NO new commitments is legitimate and must still resolve: you
+  // may have held your whole hand, and late in a fight both hands can be empty.
+  // Bailing out here left the board frozen with no way to advance — reachable
+  // the moment holding was added.
+  const anyNew = theirs.length || mine.length;
+  say(anyNew
+    ? `Clash ${G.wave-1} — both committed. Neither of you can see the other.`
+    : `<div class="clashhead">CLASH ${G.wave-1}</div>No reserves. The lines go at each other as they stand.`);
   render();
   await wait(560);
 
@@ -1886,6 +1989,7 @@ async function resolveClash(){
   // The board is yours until you say go. Point each unit at what it is hitting;
   // the enemy has already chosen theirs and cannot react to yours.
   scriptStances(G.them, G.you);                // their stances are set before yours
+  scriptMarch(G.them, G.you);                  // and anything stranded starts walking
   const theirAim = autoAim(G.them, G.you);
   busy = false;                                // the board must accept clicks
   await askOrders();
@@ -1953,6 +2057,12 @@ async function resolveClash(){
     render();
   }
 
+  // ── marches resolve LAST, after everything has taken its damage ──
+  // Order matters: a unit fights nowhere, is struck where it stood, and only
+  // then relocates. Doing it before the blows would let a front unit step aside
+  // and make the enemy's blind-aimed strike hit nothing.
+  await marchAll();
+
   // orders and stances both expire with the clash — a charge is one clash of
   // recklessness, not a mode you leave switched on
   playerAim = {};
@@ -1969,6 +2079,35 @@ async function resolveClash(){
     render();
     nudgeClash();
   }
+}
+
+// Relocate everything that was ordered to march and survived it. Re-checks room
+// at arrival: a lane that had a slot when the order was given may have been
+// filled by a reserve committed in the same clash, and a unit with nowhere to
+// go simply stays put.
+async function marchAll(){
+  const moves = [];
+  for(const side of [G.you, G.them])
+    for(const L of LANE_IX)
+      for(const c of side.lanes[L].slice())
+        if(c.marching !== undefined && !c.dead) moves.push({ side, from:L, to:c.marching, c });
+  if(!moves.length) return;
+
+  let any = false;
+  for(const { side, from, to, c } of moves){
+    delete c.marching;
+    if(present(side.lanes[to]).length >= LANE_CAP) continue;   // the gap closed
+    side.lanes[from] = side.lanes[from].filter(x=>x.id !== c.id);
+    // it arrives behind whatever is already holding that lane
+    side.lanes[to].push(c);
+    c.marched = true;
+    any = true;
+  }
+  if(!any) return;
+  say(`<div class="clashhead">THE LINE SHIFTS</div>Units under march orders take their new ground.`);
+  render();
+  await wait(560);
+  [...G.you.lanes.flat(), ...G.them.lanes.flat()].forEach(c=>delete c.marched);
 }
 
 function markTag(c,o){ c._tag = o; }
