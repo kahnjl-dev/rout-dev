@@ -12,108 +12,176 @@ while this is in pieces; `threshold` still holds the pre-rework game.
 The fight doesn't feel like a battle line. It feels like four exchanges and a
 whistle.
 
-Two things cause that, and only one of them is the turn limit.
+**The battle ends arbitrarily.** Four clashes, then count bodies. Nothing in the
+fiction says why it stops there. Engagements end when one side stops being
+willing to stand.
 
-**The battle ends arbitrarily.** Four clashes, then count bodies. Nothing about
-the fiction says why it stops there. Real engagements end when one side stops
-being willing to stand.
+**The game is called ROUT and nothing routs.** Units have morale as a health
+pool. The *army* has no morale at all. So the line grinds down evenly and stops
+on a timer, when it should hold, hold, hold, and then come apart all at once.
+Non-linear collapse is the shape that's missing, and removing the turn limit
+alone will not produce it.
 
-**The game is called ROUT and nothing routs.** Individual units have morale as a
-health pool. The *army* has no morale at all. So the line grinds down evenly and
-stops on a timer, when what it should do is hold, hold, hold, and then come apart
-all at once. Non-linear collapse is the shape that's missing, and removing the
-turn limit alone will not produce it — there is nothing in the game that models
-an army's will to stand.
+### Rejected: fighting to annihilation
 
-### Why not simply fight to annihilation
-
-The obvious fix — run until one side is wiped out — swaps an arbitrary ending
-for a long one:
-
-- The last third of every fight is a foregone conclusion you still have to play.
-- Armies historically break long before they are destroyed. Annihilation is the
-  exception, not the rule.
-- Ground scoring stops mattering. Whoever survives holds everything, so the lane
-  bounties become decoration and a whole system is quietly discarded.
+Running until one side is wiped out swaps an arbitrary ending for a long one.
+The last third of every fight becomes a foregone conclusion you still have to
+play; armies historically break long before they're destroyed; and ground
+scoring stops mattering, because whoever survives holds everything.
 
 ---
 
-## 1. Cohesion
+## 1. Four stats
 
-A second pool, per side. **Not** called morale — ✦ Morale stays the unit's health
-pool, and one word for two things is how the last rework nearly went wrong.
+```
+▲ Strike    what it deals
+⬢ Guard     the wall — clear it or achieve nothing
+✚ Health    bodies. Damage pool. PERSISTS across the run. 0 = destroyed.
+✦ Morale    will to stand. Situational. RESETS each battle. 0 = breaks.
+```
+
+Two failure modes with two separate causes, which is what the single pool could
+never express — `OVERKILL` was an arbitrary multiplier bolted on precisely
+because one pool had to produce two outcomes. It goes away entirely.
+
+### Damage lands on Health
+
+```
+Strike < Guard    nothing. the line holds.
+Strike ≥ Guard    (Strike − Guard) comes off ✚ Health
+Health → 0        DESTROYED. Gone from the warband for good.
+```
+
+Guard stays a wall, not a discount — that argument is unchanged and still the
+thing that makes concentrating vs. spreading a real decision.
+
+### Morale falls from situation, not attrition
+
+This is the part that took two rewrites to get right. Morale is **not** a second
+damage pool. Units don't break because they've been whittled down; they break
+because the men beside them ran.
+
+```
+− a neighbouring friendly unit BROKE this clash
+− outnumbered in your own lane
+− took a blow past a large fraction of what you had left
+Morale → 0        BREAKS. Leaves the field for this battle. Back for the next.
+```
+
+### Why not "health is lost when you break"
+
+The first draft had blows land on morale and health lost only on breaking. Two
+objections killed it, and both are worth keeping written down:
+
+- **It's a death clock.** Health would only move on a discrete event, so within
+  a battle it would sit there inert — a number you check between fights and
+  ignore during them. That's bookkeeping, not a mechanic.
+- **It's lopsided.** The enemy is rebuilt fresh every fight, so health would be
+  a resource exactly one side has reason to think about. That doesn't just skew
+  strategy, it breaks the opponent as a teacher — you learn this game largely by
+  watching what they do, and they'd be playing a different one.
+
+Worse, its optimal line was *cycle units out before they break* — avoidance,
+which is the third time that shape has come up after the contested-lane dodge
+and the turtle problem. Line relief is genuinely historical (Roman triplex
+acies), but it only works as a tactic if withdrawal is a real costed action. It
+belongs as its own feature, not as a side effect of where damage lands.
+
+Inverting it fixes both: health is live every clash and **both sides care about
+it**, the player simply carrying an extra consequence forward.
+
+### Health scales starting Morale
+
+```
+morale at the start of a battle = base ✦ × (current ✚ / max ✚), floored
+```
+
+A worn unit is **fragile, not feeble**. Fewer bodies means less staying power,
+but the survivors fight exactly as hard while they stand — no unit ever becomes
+a liability you're forced to field, which is the death spiral the uncapped
+scatter penalty already taught us to avoid once.
+
+This is the join between the run layer and the battle layer, and the only place
+attrition is felt mechanically. It needs a floor: a unit at 1 health must not
+arrive with 1 morale and evaporate on contact.
+
+---
+
+## 2. Cohesion
+
+A pool per side. Deliberately not called morale — one word for two things is how
+the last rework nearly went wrong, and there are now three morale-ish ideas in
+play.
 
 ```
 COHESION — the army's will to stand
   reaches 0  →  that army ROUTS. The battle ends immediately. The other side won.
 ```
 
-It is displayed where leader morale used to sit, which has been dead space since
+Displayed where leader morale used to sit, which has been dead space since
 scoring moved off it.
 
 ### What drains it
 
 | | |
 |---|---|
-| a unit of yours **breaks** | −cost |
-| a unit of yours is **destroyed** | −cost, more than a break |
-| **fatigue**, each clash | a small amount, rising as the battle drags |
+| one of your units **breaks** | −cost |
+| one of your units is **destroyed** | −cost, more |
+| **fatigue**, each clash | small, rising as the battle drags |
 | **ground**, each clash | you bleed for the ground they hold over the ground you hold |
 
-Fatigue is what guarantees the battle ends without a turn counter. It should
-*accelerate*, so a long fight tightens rather than dragging — an even contest
-should resolve, not stalemate once both hands are empty.
+Fatigue guarantees termination without a turn counter, and it **accelerates**, so
+a long fight tightens rather than dragging into the annihilation problem.
 
-### What it does to scoring
+### Ground gets a better job
 
-The winner is **whoever did not break**. That's it.
+It stops being a scoreboard counted at the end and becomes the thing that keeps
+you in the fight. Hold the fat central lanes and you bleed slower. That makes
+ground continuously worth contesting instead of worth contesting only on the
+last clash — which was the dodge problem wearing a different coat.
 
-Ground stops being a scoreboard counted at the end and becomes the thing that
-keeps you in the fight: hold the fat central lanes and you bleed slower. That is
-a better job for it — it makes ground continuously worth contesting instead of
-worth contesting only on the last clash, which was the dodge problem in a
-different coat.
+The winner is **whoever did not break.** That's the whole scoring rule.
 
 ---
 
-## 2. The breach rule
+## 3. Cascade and breach are the same system
 
-This is the piece that produces the feel. Without it cohesion is just a second
-health bar and the collapse is still smooth.
+Under the old draft these were two bolted-on special cases. Under
+morale-from-situation they're one trigger:
 
-> A break that leaves a lane **empty** costs double.
+- A neighbouring unit breaking costs you morale. That **is** cascade.
+- A break that leaves a lane **empty** costs more. That **is** the breach rule —
+  a hole in the line is worse than a casualty.
 
-A hole in the line is worse than a casualty. It makes *where* you lose a unit
-matter as much as how many — losing the centre unzips you, losing a flank
-doesn't — and it gives depth a real defensive job, since a second rank means the
-lane doesn't open when the front rank goes.
+Which means depth earns a real defensive job: a second rank keeps the lane from
+opening when the front rank goes, so it protects the units either side of it as
+well as itself.
 
-### The version to test second, not first
-
-True cascade: a unit standing **adjacent** to one that broke this clash takes
-morale damage itself, which can chain. That is the most historically accurate
-model of a line coming apart, and it is also the one that can run away into a
-single clash wiping an army. Spec'd, deliberately not built first.
+It also means collapse is properly non-linear without any special-casing. One
+break makes the next more likely, and an army that starts folding folds fast.
+**This can run away** — chained breaks emptying half a line in one clash — so
+the chain wants a limit, and the shape of that limit is a step-3 question, not
+something to discover in play.
 
 ---
 
-## 3. No turn limit
+## 4. No turn limit
 
 `CLASHES` and `WAVES` go. The fight runs until someone routs.
 
 Reserves become: deploy the opening line, then commit up to the schedule each
-clash until the hand is empty. After that you fight with what is on the field.
+clash until the hand is empty; after that you fight with what's on the field.
 That gives the battle a natural arc — fresh, committed, grinding, broken —
-rather than a fixed number of identical rounds.
+instead of a fixed number of identical rounds.
 
 ---
 
-## 4. What survives untouched
+## 5. What survives untouched
 
 - five lanes, `LANE_CAP` 2, deployment of four
 - the three arms and the rank rules
 - archers picking a rank, and reaching a neighbour from the second rank
-- Guard as a wall, overflow wearing ✦ Morale down, `OVERKILL` for destruction
+- Guard as a wall
 - cavalry CHARGE
 - marching one lane instead of striking
 - holding reserves back, with the schedule as a ceiling
@@ -121,58 +189,58 @@ rather than a fixed number of identical rounds.
 
 ---
 
-## 5. Build order
+## 6. Build order
 
-1. **Cohesion pool, break costs, rout end condition. Turn limit removed.**
-   No breach rule, no ground drain, no faction differences. The question this
-   step answers is: how long is a fight now, and does it terminate?
-2. **Ground drain** — holding lanes slows the bleed.
-3. **The breach rule** — an emptied lane costs double.
-4. **Faction starting cohesion.** Dwarves stubborn, Goblins flighty, Humans
-   between. This is the natural home for the faction axis that leader morale
-   used to occupy — and it is deliberately last, because one axis at a time is
-   the rule that has held every previous retune together.
+1. **Four stats, damage on health, destruction. No morale system yet.**
+   Units simply die. Confirms the damage model still works with the split and
+   gives the retune a stable base.
+2. **Morale from situation, and breaking.** The three triggers, no cascade
+   chaining beyond one step.
+3. **Cohesion, rout, turn limit removed.** The question this answers is: how
+   long is a fight now, and does it terminate?
+4. **Ground drain**, then **cascade limits**, then **faction starting cohesion.**
+
+Faction differences last, as always — one axis at a time is the rule that has
+held every retune together, and cohesion is the natural home for the axis that
+leader morale used to occupy.
 
 ---
 
-## 6. Known risks
+## 7. Known risks
 
-**The AI has to understand it.** An opponent that doesn't know it is about to
-break will not play like it — no committing the reserve to steady the line, no
-pressing when you are the one wavering. That is the same sleeper risk the
-ability phase has, and it is worse here because cohesion is the win condition
-rather than a modifier.
+**Legibility is the big one.** Four stats per card, two failure modes, an army
+pool, and morale that moves for reasons that aren't "something hit me." The
+clash breakdown being reconstructable took several passes to earn and this is
+exactly what would spend it. Two mitigations to design in, not bolt on: show
+✚ Health only when it isn't full, so most cards show three numbers most of the
+time; and make the breakdown say *why* morale fell, not just that it did.
 
-**Every balance number is invalidated.** The nine matchups sit at 17pt on the
-current schedule and that measurement dies the moment the win condition changes.
-A retune comes with this, and the sim harness needs rewriting first — win/loss
-is no longer "count ground at the end."
+**The AI has to understand cohesion.** An opponent that doesn't know it's about
+to break won't play like it. That's worse here than for abilities, because
+cohesion is the win condition rather than a modifier.
+
+**Every balance number dies.** The sim harness needs rewriting before anything
+can be measured — win/loss is no longer "count ground at the end."
 
 **Fight length is unknown and load-bearing.** Too short and the deck never gets
-committed and the arc doesn't happen; too long and it is the annihilation
-problem we were avoiding. Step 1 exists to measure exactly this before anything
-is built on top.
-
-**Two pools may be one too many.** Unit ✦ and army cohesion are both "morale" to
-a player. If the readouts can't make the difference obvious at a glance, this
-adds confusion rather than drama — and the clash breakdown was hard-won
-legibility that this could easily cost us.
+committed; too long and it's the annihilation problem. Step 3 exists to measure
+exactly that.
 
 ---
 
-## 7. Open questions
+## 8. Open questions
 
-1. **The numbers.** Starting cohesion, cost per break, cost per destruction, the
-   fatigue curve. All of step 1.
-2. **Does cohesion persist up the ladder?** Same question as unit wounds, and
-   probably wants the same answer.
-3. **Do lane bounties survive as numbers?** They currently weight the scoreboard.
-   If ground drives the cohesion drain instead, the weights may still apply — or
-   lanes may become equal and position may carry the meaning on its own.
+1. **The numbers.** Starting cohesion, break and destroy costs, the fatigue
+   curve, the three morale trigger values, the morale floor for worn units.
+2. **Does cohesion persist up the ladder?** Probably not — it's battle-layer,
+   like morale. Health is the thing that carries.
+3. **Do lane bounties survive as numbers?** If ground drives the cohesion drain,
+   the weights may still apply — or lanes become equal and position carries the
+   meaning on its own.
 4. **Does margin of victory matter?** Cohesion left at the end is a natural
    measure of how well you won, and the run layer has never had a reward axis.
-5. **Do broken units still return next fight?** They break more often now, by
-   design, so the run economy may need revisiting.
-6. **Does a routing army lose its units?** An army that breaks and runs
-   historically loses stragglers — this could be where run attrition comes from,
-   replacing the current scatter rule.
+5. **Does a routing army lose stragglers?** Health lost by the whole warband when
+   it routs is the historically right answer and would be a cleaner home for run
+   attrition than the current scatter rule.
+6. **Line relief.** Pulling a unit back out of contact, at a price. Named here so
+   it doesn't get smuggled in as a side effect of something else.
