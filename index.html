@@ -75,6 +75,7 @@
   .c .sv.up{color:#ff9d5c;font-weight:700}
   .c .gv.down{color:#7a8fa8}
   .stance{display:flex;align-items:center;gap:8px;margin-top:7px}
+  .holdnote{font-size:10.5px;color:var(--faint);margin-top:5px;letter-spacing:.03em}
   .stance .scost{font-size:10.5px;color:var(--faint);letter-spacing:.04em}
   .c .ofm{opacity:.5;font-size:10px;margin-left:0}
   .c .dug{color:var(--m);font-size:9px;vertical-align:1px;margin-left:1px}
@@ -1763,7 +1764,7 @@ async function revealDeployment(){
   G.phase = 'reserve';
   G.wave = 2;
   busy = false;
-  say(`The lines face each other — <b>no blows yet</b>. Commit <b>${reservesFor(2)}</b>, then they clash.`);
+  sayCommit(`<div class="clashhead">THE LINES ARE SET</div>No blows yet. `);
   render();
   nudgeClash();          // nothing to commit? go straight to the clash
 }
@@ -1804,6 +1805,32 @@ function nudgeClash(){
   if(!busy && !G.over && G.phase === 'reserve' && stillToCommit() === 0) resolveClash();
 }
 
+// The commit prompt, with the option to stop committing and let the clash come.
+//
+// The schedule is a CEILING, not a quota. Holding does not bank the card for a
+// bigger wave later — you simply never get that slot back, so across a fight you
+// put fewer bodies on the field. Since ground is won on bodies standing, that is
+// the price: information and preservation, paid for in presence. It also stops
+// the degenerate line the option would otherwise create — hold everything, let
+// the opening line soak the battle, then dump fresh units into empty lanes on
+// the last clash and take the ground with troops that were never in danger.
+function sayCommit(prefix){
+  const left = stillToCommit();
+  if(left <= 0) return;
+  const held = G.committed || 0;
+  say(`${prefix || `<div class="clashhead">CLASH ${G.wave-1}</div>`}`
+    + `Commit up to <b>${left}</b> more`
+    + (held ? `, or send them in as they are.` : `, or hold your hand back entirely.`)
+    + `<div class="nextup"><button class="btn" id="goHold">`
+    + (held ? `THAT'S ALL →` : `HOLD ALL →`) + `</button></div>`
+    + `<div class="holdnote">A slot you don't use is gone — holding never buys you a bigger wave later.</div>`);
+  wireHold();
+}
+function wireHold(){
+  const b = $('#goHold');
+  if(b) b.onclick = ()=>{ if(!busy && !aiming && !G.over) resolveClash(); };
+}
+
 async function commitReserve(lane, atFront){
   // ── 1. you commit, face down, as many as this clash asks for ──
   // Your cards go down one at a time but stay hidden until the whole wave is
@@ -1817,8 +1844,7 @@ async function commitReserve(lane, atFront){
 
   const left = stillToCommit();
   if(left > 0){
-    say(`Clash ${G.wave-1} — commit <b>${left}</b> more.`
-      + (G.committed === 1 ? ` They are choosing at the same moment.` : ''));
+    sayCommit();
     render();
     return;
   }
@@ -1939,7 +1965,7 @@ async function resolveClash(){
   else {
     busy = false;
     // keep the tally on screen while they decide — appended, not replaced
-    $('#msg').innerHTML += `<div class="nextup">Clash ${G.wave-1} — commit <b>${reservesFor(G.wave)}</b>.</div>`;
+    sayCommit();
     render();
     nudgeClash();
   }
