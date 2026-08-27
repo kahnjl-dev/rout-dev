@@ -652,10 +652,17 @@ const adjacent  = L => [L-1, L+1].filter(x => x >= 0 && x < LANES);
 // has to happen EVERY round or the hook dilutes across the extra length instead
 // of repeating. Starting at 4 clashes rather than 8: a four-fight ladder at
 // eight rounds is a ~25-minute run, which is a different product.
-let CLASHES = 4;
-const WAVES = 1 + CLASHES;
 const DEPLOY_N  = 4;      // opening line, at most two to any one lane
-const HAND_SIZE = DEPLOY_N + CLASHES;   // the line, plus one reserve per clash
+// How many units you commit at the start of each clash. Feeding the battle one
+// card at a time made the middle of a fight drag: four clashes of a single
+// reserve is four near-identical decisions. Front-loading the second wave gives
+// the fight a shape — lay a line, answer their line in force, then trickle.
+const RESERVE_N = [3, 1, 1, 1];
+const CLASHES   = RESERVE_N.length;
+const WAVES     = 1 + CLASHES;
+const HAND_SIZE = DEPLOY_N + RESERVE_N.reduce((a,b)=>a+b, 0);
+// how many this clash wants; wave 2 is the first clash
+const reservesFor = w => RESERVE_N[w - 2] || 0;
 let OVERKILL    = 2;   // damage this many times the morale left destroys outright
 const LANE_CAP  = 2;      // living units per lane; a corpse frees the slot
 
@@ -774,7 +781,9 @@ assertDecks();
 // near 50% fights won and ~35% boss kills.
 let RUNG_BONUS = [-3, -2, -2];
 let BOSS_BONUS = -1;
-const MIN_DECK    = HAND_SIZE; // below this you cannot field a full fight
+// Enough to lay an opening line and keep something in reserve. It used to be a
+// full hand, but a short hand is playable — you simply commit fewer.
+const MIN_DECK    = DEPLOY_N + 2;
 const SCATTER_CAP = 1;         // routed cards lost per defeat
 
 const TITLES = {
@@ -947,7 +956,7 @@ function beginFight(enc){
   // reveals WITHOUT fighting. The enemy's line is chosen now, before the player
   // places anything, so neither side is reacting to the other.
   G.phase = 'deploy';
-  G.deployed = 0;
+  G.deployed = 0; G.committed = 0;
   pendingLane = -1;
   aiming = null; playerAim = {}; aimSel = null;
   G.enemyDeploy = pickDeployment(G.them, G.you).map(c=>({card:c.card, L:c.L, back:c.back}));
@@ -1754,8 +1763,9 @@ async function revealDeployment(){
   G.phase = 'reserve';
   G.wave = 2;
   busy = false;
-  say(`The lines face each other — <b>no blows yet</b>. Commit a reserve, then they clash.`);
+  say(`The lines face each other — <b>no blows yet</b>. Commit <b>${reservesFor(2)}</b>, then they clash.`);
   render();
+  nudgeClash();          // nothing to commit? go straight to the clash
 }
 
 // A lane holds at most two living units. With one already there the new unit can
@@ -1773,34 +1783,78 @@ function placeAt(lane, atFront){
   return G.phase === 'deploy' ? deployCard(lane, atFront) : commitReserve(lane, atFront);
 }
 
+// Room for another card anywhere, and something to put there.
+const canCommit = () => G.you.hand.length > 0
+  && LANE_IX.some(L => present(G.you.lanes[L]).length < LANE_CAP);
+
+// How many more this clash still wants from you — capped by what you can
+// actually place. A short deck or a full board simply commits fewer; without
+// this the board waits forever for a placement that cannot be made.
+function stillToCommit(){
+  const want = reservesFor(G.wave);
+  const placed = G.committed || 0;
+  if(placed >= want || !canCommit()) return 0;
+  return Math.min(want - placed, G.you.hand.length);
+}
+
+// Called whenever the player might have nothing left to give — start of a clash,
+// or after a placement — so an empty hand or a full line rolls straight into the
+// clash instead of hanging.
+function nudgeClash(){
+  if(!busy && !G.over && G.phase === 'reserve' && stillToCommit() === 0) resolveClash();
+}
+
 async function commitReserve(lane, atFront){
-  busy = true;
+  // ── 1. you commit, face down, as many as this clash asks for ──
+  // Your cards go down one at a time but stay hidden until the whole wave is
+  // committed, so nothing you place mid-wave leaks to the enemy: living()
+  // excludes face-down cards, which is what the AI reads.
   const myCard = G.you.hand.splice(sel,1)[0];
   sel = null;
-
-  const pick = enemyChoose();
-  if(!pick){                                   // empty enemy hand: never lock the board
-    console.warn('[ROUT] enemy had no card to play');
-    G.you.hand.push(myCard); busy = false; render(); return;
-  }
-  const foeCard = G.them.hand.splice(pick.hi,1)[0];
-
-  // ── 1. both commit, face down ──
-  myCard.down = foeCard.down = true;
+  myCard.down = true;
   if(atFront) G.you.lanes[lane].unshift(myCard); else G.you.lanes[lane].push(myCard);
-  // same preference drives reserves: archers seek cover, the rest lead
-  const foeBack = postureOf(foeCard).back > 0 && present(G.them.lanes[pick.L]).length > 0;
-  if(foeBack) G.them.lanes[pick.L].push(foeCard); else G.them.lanes[pick.L].unshift(foeCard);
-  say(`Wave ${G.wave} — both committed. Neither of you can see the other.`);
+  G.committed = (G.committed || 0) + 1;
+
+  const left = stillToCommit();
+  if(left > 0){
+    say(`Clash ${G.wave-1} — commit <b>${left}</b> more.`
+      + (G.committed === 1 ? ` They are choosing at the same moment.` : ''));
+    render();
+    return;
+  }
+  return resolveClash();
+}
+
+async function resolveClash(){
+  busy = true;
+  const want = reservesFor(G.wave);
+  const mine = G.you.lanes.flat().filter(c=>c.down);
+  G.committed = 0;
+
+  // the enemy commits the same number, blind to everything you just laid down
+  const theirs = [];
+  for(let i = 0; i < want; i++){
+    const pick = enemyChoose();
+    if(!pick) break;                           // empty hand: never lock the board
+    const foeCard = G.them.hand.splice(pick.hi, 1)[0];
+    foeCard.down = true;
+    // same preference drives reserves: archers seek cover, the rest lead
+    const foeBack = postureOf(foeCard).back > 0 && present(G.them.lanes[pick.L]).length > 0;
+    if(foeBack) G.them.lanes[pick.L].push(foeCard); else G.them.lanes[pick.L].unshift(foeCard);
+    theirs.push(foeCard);
+  }
+  if(!theirs.length && !mine.length){ busy = false; render(); return; }
+
+  say(`Clash ${G.wave-1} — both committed. Neither of you can see the other.`);
   render();
   await wait(560);
 
   // ── 2. reveal, together ──
-  delete myCard.down; delete foeCard.down;
-  myCard.reveal = foeCard.reveal = true;
+  const flipped = [...mine, ...theirs];
+  flipped.forEach(c=>{ delete c.down; c.reveal = true; });
   render();
   await wait(420);
-  delete myCard.reveal; delete foeCard.reveal;
+  flipped.forEach(c=>delete c.reveal);
 
   // ── 3. orders ──
   // The board is yours until you say go. Point each unit at what it is hitting;
@@ -1885,8 +1939,9 @@ async function commitReserve(lane, atFront){
   else {
     busy = false;
     // keep the tally on screen while they decide — appended, not replaced
-    $('#msg').innerHTML += `<div class="nextup">Commit your next reserve.</div>`;
+    $('#msg').innerHTML += `<div class="nextup">Clash ${G.wave-1} — commit <b>${reservesFor(G.wave)}</b>.</div>`;
     render();
+    nudgeClash();
   }
 }
 
